@@ -5,13 +5,14 @@ setlocal
 set "PYTHONPATH=%~dp0src"
 
 if defined MVS_PYTHON (
-  "%MVS_PYTHON%" -m multivoice.tray %*
+  "%MVS_PYTHON%" -m multivoice.ui.tray %*
   goto :eof
 )
 
 set "VENV=D:\Local Repositories\_venvs\MultiVoice-Summary-Suit\Scripts\pythonw.exe"
 if exist "%VENV%" (
-  "%VENV%" -m multivoice.tray %*
+  "%VENV%" -m multivoice.ui.tray %*
 ) else (
-  pythonw -m multivoice.tray %*
+  pythonw -m multivoice.ui.tray %*
 )
+

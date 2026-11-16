@@ -4,12 +4,16 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFormLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QTextEdit,
     QVBoxLayout,
 )
 
@@ -18,6 +22,64 @@ from ..config import PROJECT_ROOT
 from . import i18n
 
 ASSETS = PROJECT_ROOT / "assets"
+
+CATEGORIES = ["person", "slang", "theory", "product", "event", "other"]
+KINDS = ["evergreen", "product", "current", "event", "other"]
+
+
+class TermEditDialog(QDialog):
+    """Fill in a pending term before writing it into the knowledge base."""
+
+    def __init__(self, term: str, hint: str = "", topics: list[str] | None = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(i18n.t("add_to_kb"))
+        self.resize(460, 340)
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.term = QLineEdit(term)
+        self.term.setReadOnly(True)
+        self.definition = QTextEdit()
+        self.definition.setPlainText(hint)
+        self.definition.setFixedHeight(80)
+        self.en = QLineEdit()
+
+        self.category = QComboBox()
+        self.category.addItems(CATEGORIES)
+        self.category.setCurrentText("other")
+        self.kind = QComboBox()
+        self.kind.addItems(KINDS)
+        self.kind.setCurrentText("current")
+
+        self.topic = QComboBox()
+        self.topic.setEditable(True)
+        self.topic.addItems(topics or ["deepseek", "网络热词"])
+
+        form.addRow(i18n.t("term"), self.term)
+        form.addRow(i18n.t("definition"), self.definition)
+        form.addRow("English", self.en)
+        form.addRow(i18n.t("category"), self.category)
+        form.addRow(i18n.t("kind"), self.kind)
+        form.addRow(i18n.t("topic"), self.topic)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def values(self) -> dict:
+        return {
+            "term": self.term.text().strip(),
+            "definition": self.definition.toPlainText().strip(),
+            "en": self.en.text().strip(),
+            "category": self.category.currentText(),
+            "kind": self.kind.currentText(),
+            "topic": self.topic.currentText().strip(),
+        }
 
 
 class ReviewDialog(QDialog):
@@ -41,14 +103,17 @@ class ReviewDialog(QDialog):
         layout.addWidget(self.list)
 
         row = QDialogButtonBox()
+        self.btn_add = QPushButton(i18n.t("add_to_kb"))
         self.btn_research = QPushButton(i18n.t("research_selected"))
         self.btn_drop = QPushButton(i18n.t("drop_selected"))
+        row.addButton(self.btn_add, QDialogButtonBox.ButtonRole.ActionRole)
         row.addButton(self.btn_research, QDialogButtonBox.ButtonRole.ActionRole)
         row.addButton(self.btn_drop, QDialogButtonBox.ButtonRole.ActionRole)
         row.addButton(QDialogButtonBox.StandardButton.Close)
         row.rejected.connect(self.accept)
         layout.addWidget(row)
 
+        self.btn_add.clicked.connect(self.add_selected)
         self.btn_research.clicked.connect(self.research_selected)
         self.btn_drop.clicked.connect(self.drop_selected)
 
@@ -92,6 +157,25 @@ class ReviewDialog(QDialog):
 
     def selected_terms(self) -> list[str]:
         return [i.data(1) for i in self.list.selectedItems() if i.data(1)]
+
+    def add_selected(self) -> None:
+        for term in self.selected_terms():
+            hint = " / ".join(self._hints.get(term, []))
+            dialog = TermEditDialog(term, hint, list(self.lex.topics), self)
+            if not dialog.exec():
+                continue
+            values = dialog.values()
+            self.lex.add(
+                values["term"],
+                definition=values["definition"],
+                en=values["en"],
+                category=values["category"],
+                kind=values["kind"],
+                topic=values["topic"],
+                confidence="medium",
+            )
+            self.lex.resolve_pending(term)
+        self.reload()
 
     def research_selected(self) -> None:
         for term in self.selected_terms():

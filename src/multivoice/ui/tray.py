@@ -337,9 +337,9 @@ class TrayApp(QSystemTrayIcon):
         return found[0] if found else None
 
     def _on_activated(self, reason) -> None:
-        if reason == QSystemTrayIcon.ActivationReason.Trigger:
-            self.menu.popup(self.geometry().center())
-        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        # Clicking the tray icon (or the overflow arrow) opens the panel directly.
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                      QSystemTrayIcon.ActivationReason.DoubleClick):
             self.open_panel()
 
     # ------------------------------------------------------------------ actions

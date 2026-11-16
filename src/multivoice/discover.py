@@ -58,6 +58,8 @@ def _acceptable(term: str, known: set[str]) -> bool:
     if any(word in term for word in (
         "系列", "输入", "输出", "价格", "功能", "自动", "缓存", "推理",
         "训练", "接口", "平台", "服务", "模型", "参数",
+        "短信", "通知", "伪装", "钓鱼", "回复", "确认", "点击", "邮件",
+        "客服", "电话", "链接", "指南", "教程", "方法",
     )):
         return False
     return True

@@ -48,7 +48,7 @@ def _read_segments(path: Path) -> list[Segment]:
     return [Segment(**item) for item in data]
 
 
-def _transcribe_chunked(audio: Path, cfg: Config, job: Path) -> tuple[list[Segment], str]:
+def _transcribe_chunked(audio: Path, cfg: Config, job: Path, report=None) -> tuple[list[Segment], str]:
     """Split on speech boundaries, transcribe each chunk, keep global timestamps."""
     engine = asr.build(cfg)
     spans = vad.detect_speech_spans(
@@ -66,6 +66,7 @@ def _transcribe_chunked(audio: Path, cfg: Config, job: Path) -> tuple[list[Segme
 
     segments: list[Segment] = []
     language = ""
+    total = max(1, len(chunks))
     for index, span in enumerate(chunks):
         chunk_path = job / "chunks" / f"{index:03d}.wav"
         vad.cut(audio, span, chunk_path, cfg.ffmpeg)
@@ -77,6 +78,8 @@ def _transcribe_chunked(audio: Path, cfg: Config, job: Path) -> tuple[list[Segme
             segments.append(
                 Segment(len(segments), start, end, item.text, item.lang or lang)
             )
+        if report:
+            report(10 + int(45 * (index + 1) / total), "asr")
     return segments, language
 
 
@@ -88,6 +91,7 @@ def run(
     stages: tuple[str, ...] = ALL_STAGES,
     resume: bool = True,
     outputs: tuple[str, ...] = ("a", "b", "c"),
+    on_progress=None,
 ) -> Path:
     source = Path(source)
     if not source.exists():
@@ -98,9 +102,19 @@ def run(
     lex = glossary.load()
     lex.prune_pending()
 
+    def report(value: int, key: str) -> None:
+        if on_progress:
+            try:
+                on_progress(int(value), key)
+            except Exception:
+                pass
+
+    report(3, "audio")
+
     audio = job / "audio.wav"
     if not (resume and audio.exists()):
         ingest.extract_audio(source, audio, cfg.ffmpeg)
+    report(8, "audio")
 
     raw_json = job / "segments.raw.json"
     fixed_json = job / "segments.corrected.json"
@@ -120,10 +134,13 @@ def run(
             segments = _read_segments(raw_json)
         else:
             if cfg.vad.get("enabled", True):
-                segments, detected = _transcribe_chunked(audio, cfg, job)
+                report(10, "asr")
+                segments, detected = _transcribe_chunked(audio, cfg, job, report)
             else:
+                report(10, "asr")
                 segments, detected = asr.transcribe(audio, cfg)
             segments, normalized_count = normalize.normalize_segments(segments)
+            report(55, "asr")
             _write(raw_json, json.dumps([s.to_dict() for s in segments],
                                         ensure_ascii=False, indent=2))
 
@@ -152,13 +169,16 @@ def run(
             head = "\n".join(seg.text for seg in segments)[:3000]
 
             # 2) classify the content, then research unknown or stale terms on the fly
+            report(60, "classify")
             context = classify.classify(head, cfg)
             candidates = list(context["terms"])
             candidates += [entry["term"] for entry in lex.match(head)]
+            report(66, "research")
             researched = research.ensure_terms(candidates, lex, cfg)
             glossary_text, _ = lex.context_for(head)
 
             # 3) encyclopedia facts for hard entities
+            report(72, "research")
             evidence, items = verify.build_evidence(context["terms"], cfg)
             findings = verify.suggest(items, evidence)
 
@@ -173,12 +193,14 @@ def run(
             if findings:
                 _write(out / "verification.md", verify.to_markdown(findings))
 
+        report(76, "correct")
         segments = correct.correct_segments(
             segments, cfg,
             domain=context.get("label", ""),
             evidence=evidence,
             glossary_text=glossary_text,
         )
+        report(84, "correct")
         _write(fixed_json, json.dumps([s.to_dict() for s in segments],
                                       ensure_ascii=False, indent=2))
 
@@ -190,6 +212,7 @@ def run(
 
     source_lang = _norm_lang(detected) or "zh"
     if "translate" in stages:
+        report(86, "translate")
         paras = translate.paragraphs(segments, source_lang)
         for target in cfg.languages:
             if target == source_lang:
@@ -203,10 +226,12 @@ def run(
         if resume and units_json.exists():
             units = json.loads(units_json.read_text(encoding="utf-8"))
         else:
+            report(90, "extract")
             units = structure.extract_units(segments, cfg)
             _write(units_json, json.dumps(units, ensure_ascii=False, indent=2))
 
     if "generate" in stages and units:
+        report(95, "generate")
         transcript_text = "\n".join(seg.text for seg in segments)
         if "a" in outputs:
             _write(out / "a-script.md", generate.clean_script(segments, cfg))
@@ -228,4 +253,5 @@ def run(
         "updated": datetime.now().isoformat(timespec="seconds"),
     }
     _write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))
+    report(100, "done")
     return out

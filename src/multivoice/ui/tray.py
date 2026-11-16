@@ -56,6 +56,7 @@ def app_icon() -> QIcon:
 class Worker(QThread):
     done = Signal(str, str, str)   # output dir, stage, output kind
     failed = Signal(str)
+    progress = Signal(int, str)
 
     def __init__(self, source: Path, cfg: Config, stages: tuple[str, ...],
                  stage: str, outputs: tuple[str, ...] = ("a", "b", "c")):
@@ -68,8 +69,10 @@ class Worker(QThread):
 
     def run(self) -> None:  # noqa: D401
         try:
-            out = pipeline.run(self.source, self.cfg, stages=self.stages,
-                               outputs=self.outputs)
+            out = pipeline.run(
+                self.source, self.cfg, stages=self.stages, outputs=self.outputs,
+                on_progress=lambda value, key: self.progress.emit(value, key),
+            )
             self.done.emit(str(out), self.stage, ",".join(self.outputs))
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -325,10 +328,18 @@ class TrayApp(QSystemTrayIcon):
         self.panel.activateWindow()
 
     def open_review(self) -> None:
-        self.review_dialog = ReviewDialog(self.cfg, self)
-        self.review_dialog.exec()
-        self.review_dialog = None
-        self._refresh()
+        try:
+            self.review_dialog = ReviewDialog(self.cfg, self.panel)
+            self.review_dialog.exec()
+            self.review_dialog = None
+            self._refresh()
+        except Exception:
+            import traceback
+
+            log = PROJECT_ROOT / "work" / "tray-error.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open("a", encoding="utf-8") as handle:
+                traceback.print_exc(file=handle)
 
     def pick_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(None, i18n.t("transcribe"), "", AUDIO_FILTER)
@@ -351,8 +362,18 @@ class TrayApp(QSystemTrayIcon):
         self.worker = Worker(source, self.cfg, stages, stage, outputs)
         self.worker.done.connect(self.on_done)
         self.worker.failed.connect(self.on_error)
+        self.worker.progress.connect(self.on_progress)
         self.worker.start()
+        if self.panel is not None:
+            self.panel.set_progress(0, i18n.t("stage_audio"))
         self._refresh()
+
+    def on_progress(self, value: int, key: str) -> None:
+        message = i18n.t(f"stage_{key}")
+        self.panel_status = message
+        self.action_status.setText(message)
+        if self.panel is not None:
+            self.panel.set_progress(value, message)
 
     def on_done(self, output: str, stage: str, kinds: str) -> None:
         self.last_output = Path(output)
@@ -372,11 +393,15 @@ class TrayApp(QSystemTrayIcon):
                              i18n.t("outputs_ready", kind=kind_label),
                              QSystemTrayIcon.MessageIcon.Information, 8000)
         self.setToolTip(i18n.t("app_name"))
+        if self.panel is not None:
+            self.panel.clear_progress()
         self._refresh()
 
     def on_error(self, message: str) -> None:
         self.panel_status = i18n.t("status_failed")
         self.action_status.setText(self.panel_status)
+        if self.panel is not None:
+            self.panel.clear_progress()
         self.showMessage(i18n.t("app_name"),
                          i18n.t("failed_msg", message=message[:300]),
                          QSystemTrayIcon.MessageIcon.Critical, 8000)

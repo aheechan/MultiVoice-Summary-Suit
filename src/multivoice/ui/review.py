@@ -2,19 +2,21 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
+    QScrollArea,
     QTextEdit,
     QVBoxLayout,
+    QWidget,
 )
 
 from .. import glossary, prefetch, research
@@ -26,6 +28,15 @@ ASSETS = PROJECT_ROOT / "assets"
 CATEGORIES = ["person", "slang", "theory", "product", "event", "other"]
 KINDS = ["evergreen", "product", "current", "event", "other"]
 
+CARD_STYLE = """
+QFrame#card {
+    background: #0a1220; border: 1px solid #1b3055; border-radius: 10px;
+}
+QLabel#summary { color: #cfe4ff; font-size: 12px; }
+QLabel#titles { color: #7f93ad; font-size: 11px; }
+QCheckBox#term { color: #eaf7ff; font-size: 13px; font-weight: 600; }
+"""
+
 
 class TermEditDialog(QDialog):
     """Fill in a pending term before writing it into the knowledge base."""
@@ -33,7 +44,7 @@ class TermEditDialog(QDialog):
     def __init__(self, term: str, hint: str = "", topics: list[str] | None = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle(i18n.t("add_to_kb"))
-        self.resize(460, 340)
+        self.resize(480, 360)
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -42,7 +53,7 @@ class TermEditDialog(QDialog):
         self.term.setReadOnly(True)
         self.definition = QTextEdit()
         self.definition.setPlainText(hint)
-        self.definition.setFixedHeight(80)
+        self.definition.setFixedHeight(90)
         self.en = QLineEdit()
 
         self.category = QComboBox()
@@ -87,21 +98,32 @@ class ReviewDialog(QDialog):
         super().__init__(parent)
         self.cfg = cfg
         self.lex = glossary.load()
-        self._mtime_seen = 0.0
         self._hints: dict[str, str] = {}
-        self._cache_mtime_seen = self._cache_mtime()
+        self.checks: dict[str, QCheckBox] = {}
 
         self.setWindowTitle(i18n.t("review_title"))
         self.setWindowIcon(QIcon(str(ASSETS / "icon.png")))
-        self.resize(560, 400)
+        self.resize(760, 580)
+        self.setStyleSheet(CARD_STYLE)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(i18n.t("review_hint")))
+        layout.setContentsMargins(16, 16, 16, 12)
+        layout.setSpacing(10)
 
-        self.list = QListWidget()
-        self.list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.reload()
-        layout.addWidget(self.list)
+        self.hint = QLabel(i18n.t("review_hint"))
+        self.hint.setWordWrap(True)
+        layout.addWidget(self.hint)
+
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.container = QWidget()
+        self.cards = QVBoxLayout(self.container)
+        self.cards.setContentsMargins(2, 2, 2, 2)
+        self.cards.setSpacing(12)
+        self.cards.addStretch(1)
+        self.scroll.setWidget(self.container)
+        layout.addWidget(self.scroll, 1)
 
         row = QDialogButtonBox()
         self.btn_add = QPushButton(i18n.t("add_to_kb"))
@@ -118,18 +140,32 @@ class ReviewDialog(QDialog):
         self.btn_research.clicked.connect(self.research_selected)
         self.btn_drop.clicked.connect(self.drop_selected)
 
+        self._cache_mtime_seen = self._cache_mtime()
         self._timer = QTimer(self)
         self._timer.setInterval(1200)
         self._timer.timeout.connect(self._maybe_refresh)
         self._timer.start()
 
+        self.reload()
+
+    # ------------------------------------------------------------------ cards
+    def _clear_cards(self) -> None:
+        while self.cards.count():
+            item = self.cards.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
     def reload(self) -> None:
-        selected = set(self.selected_terms())
-        self.list.clear()
+        checked = {term for term, box in self.checks.items() if box.isChecked()}
+        self._clear_cards()
+        self.checks = {}
+
         if not self.lex.pending:
-            item = QListWidgetItem(i18n.t("nothing_pending"))
-            item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.list.addItem(item)
+            label = QLabel(i18n.t("nothing_pending"))
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.cards.addWidget(label)
+            self.cards.addStretch(1)
             return
 
         language = i18n.language()
@@ -137,8 +173,10 @@ class ReviewDialog(QDialog):
         for entry in self.lex.pending:
             term = entry["term"]
             record = prefetch.cached(term)
+            summary = ""
+            titles: list[str] = []
             if record is None:
-                text = f"{term}   x{entry.get('count', 1)}   …"
+                summary = "…"
             elif record.get("empty"):
                 dropped.append(term)
                 continue
@@ -146,16 +184,37 @@ class ReviewDialog(QDialog):
                 summary = record.get("summary_zh" if language == "zh" else "summary_en") or ""
                 titles = record.get("zh" if language == "zh" else "en") or []
                 self._hints[term] = summary or " / ".join(titles[:2])
-                text = f"{term}   x{entry.get('count', 1)}"
-                if summary:
-                    text += f"\n    {summary[:120]}"
-                if titles:
-                    text += "\n    · " + "  |  ".join(titles[:2])
-            item = QListWidgetItem(text)
-            item.setData(1, term)
-            self.list.addItem(item)
-            if term in selected:
-                item.setSelected(True)
+
+            card = QFrame()
+            card.setObjectName("card")
+            inner = QVBoxLayout(card)
+            inner.setContentsMargins(14, 12, 14, 12)
+            inner.setSpacing(6)
+
+            box = QCheckBox(term)
+            box.setObjectName("term")
+            font = box.font()
+            font.setBold(True)
+            box.setFont(font)
+            box.setChecked(term in checked)
+            self.checks[term] = box
+            inner.addWidget(box)
+
+            if summary:
+                label = QLabel(summary)
+                label.setObjectName("summary")
+                label.setWordWrap(True)
+                inner.addWidget(label)
+
+            if titles:
+                meta = QLabel("· " + "  |  ".join(titles[:2]))
+                meta.setObjectName("titles")
+                meta.setWordWrap(True)
+                inner.addWidget(meta)
+
+            self.cards.addWidget(card)
+
+        self.cards.addStretch(1)
 
         if dropped:
             self.lex.pending = [p for p in self.lex.pending if p["term"] not in dropped]
@@ -173,13 +232,13 @@ class ReviewDialog(QDialog):
             self._cache_mtime_seen = current
             self.reload()
 
+    # ------------------------------------------------------------------ actions
     def selected_terms(self) -> list[str]:
-        return [i.data(1) for i in self.list.selectedItems() if i.data(1)]
+        return [term for term, box in self.checks.items() if box.isChecked()]
 
     def add_selected(self) -> None:
         for term in self.selected_terms():
-            hint = self._hints.get(term, "")
-            dialog = TermEditDialog(term, hint, list(self.lex.topics), self)
+            dialog = TermEditDialog(term, self._hints.get(term, ""), list(self.lex.topics), self)
             if not dialog.exec():
                 continue
             values = dialog.values()

@@ -85,6 +85,10 @@ def load(config_dir: str | Path | None = None) -> Config:
         ]
         cfg.llm["order"] = provider_store.order(stored) or cfg.llm.get("order", [])
 
+    chosen = prefs.get("provider")
+    if chosen and any(p.get("name") == chosen for p in cfg.llm.get("providers", [])):
+        cfg.llm["order"] = [chosen]
+
     return cfg
 
 

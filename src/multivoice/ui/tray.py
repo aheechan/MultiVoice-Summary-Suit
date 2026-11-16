@@ -16,7 +16,9 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QInputDialog,
+    QLabel,
     QLineEdit,
     QMenu,
     QMessageBox,
@@ -140,7 +142,12 @@ class SettingsDialog(QDialog):
         prefs = settings.load()
 
         layout = QVBoxLayout(self)
-        form = QFormLayout()
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setSpacing(12)
+
+        kb_box = QGroupBox(i18n.t("knowledge_base"))
+        kb_form = QFormLayout(kb_box)
+        kb_form.setSpacing(8)
 
         self.auto = QCheckBox(i18n.t("auto_research"))
         self.auto.setChecked(bool(prefs.get("auto_research", True)))
@@ -151,18 +158,27 @@ class SettingsDialog(QDialog):
         self.limit.setRange(0, 12)
         self.limit.setValue(int(prefs.get("max_terms", 6)))
 
-        self.manage = QPushButton(i18n.t("manage_providers"))
-        self.manage.clicked.connect(self.open_providers)
-
-        form.addRow(self.auto)
-        form.addRow(self.discover)
-        form.addRow(i18n.t("max_lookups"), self.limit)
-        form.addRow(self.manage)
-        layout.addLayout(form)
+        kb_form.addRow(self.auto)
+        kb_form.addRow(self.discover)
+        kb_form.addRow(i18n.t("max_lookups"), self.limit)
 
         self.export_button = QPushButton(i18n.t("export"))
         self.export_button.clicked.connect(self.export_kb)
-        layout.addWidget(self.export_button)
+        kb_form.addRow(self.export_button)
+        layout.addWidget(kb_box)
+
+        model_box = QGroupBox(i18n.t("models_section"))
+        model_form = QFormLayout(model_box)
+        model_form.setSpacing(8)
+        active = (cfg.llm.get("order") or ["—"])[0]
+        self.active_label = QLabel(i18n.t("current_provider", name=active))
+        self.manage = QPushButton(i18n.t("manage_providers"))
+        self.manage.clicked.connect(self.open_providers)
+        model_form.addRow(self.active_label)
+        model_form.addRow(self.manage)
+        layout.addWidget(model_box)
+
+        layout.addStretch(1)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -173,6 +189,8 @@ class SettingsDialog(QDialog):
 
     def open_providers(self) -> None:
         ProviderManagerDialog(self.cfg, self).exec()
+        active = (self.cfg.llm.get("order") or ["—"])[0]
+        self.active_label.setText(i18n.t("current_provider", name=active))
 
     def export_kb(self) -> None:
         default = str(PROJECT_ROOT / "glossary-export.json")
@@ -274,6 +292,18 @@ class TrayApp(QSystemTrayIcon):
         self.action_settings = QAction(i18n.t("settings"), self)
         self.action_settings.triggered.connect(self.show_settings)
 
+        self.provider_menu = QMenu(i18n.t("providers"), self.menu)
+        active = (self.cfg.llm.get("order") or [""])[0]
+        for item in self.cfg.llm.get("providers", []):
+            name = item.get("name", "")
+            action = self.provider_menu.addAction(name)
+            action.setCheckable(True)
+            action.setChecked(name == active)
+            action.triggered.connect(lambda _=False, n=name: self.select_provider(n))
+        self.provider_menu.addSeparator()
+        manage = self.provider_menu.addAction(i18n.t("manage_providers"))
+        manage.triggered.connect(self.show_providers)
+
         self.action_language = QAction(i18n.t("language"), self)
         self.action_language.triggered.connect(self.toggle_language)
 
@@ -299,6 +329,7 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addMenu(self.output_menu)
         self.menu.addAction(self.action_output_dir)
         self.menu.addSeparator()
+        self.menu.addMenu(self.provider_menu)
         self.menu.addAction(self.action_settings)
         self.menu.addAction(self.action_language)
         self.menu.addAction(self.action_about)
@@ -490,6 +521,17 @@ class TrayApp(QSystemTrayIcon):
         self._open(path)
 
     # ------------------------------------------------------------------ misc
+    def show_providers(self) -> None:
+        ProviderManagerDialog(self.cfg, self.panel).exec()
+        self.retranslate()
+
+    def select_provider(self, name: str) -> None:
+        settings.save({"provider": name})
+        self.cfg.llm["order"] = [name]
+        self.retranslate()
+        self.showMessage(i18n.t("app_name"), i18n.t("current_provider", name=name),
+                         QSystemTrayIcon.MessageIcon.Information, 4000)
+
     def show_settings(self) -> None:
         dialog = SettingsDialog(self.cfg)
         if not dialog.exec():

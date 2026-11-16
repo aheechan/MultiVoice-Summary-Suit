@@ -490,6 +490,7 @@ class TrayApp(QSystemTrayIcon):
             self.transcript_ready = True
             self.panel_status = i18n.t("status_transcript")
             self.action_status.setText(self.panel_status)
+            self.open_panel()
             self.showMessage(i18n.t("app_name"), i18n.t("transcript_ready_msg"),
                              QSystemTrayIcon.MessageIcon.Information, 8000)
         else:

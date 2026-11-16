@@ -32,6 +32,13 @@ QLabel#subtitle { color: #7f93ad; font-size: 12px; }
 QLabel#status { color: #9fd8ff; font-size: 12px; }
 QLabel#info { color: #6f86a6; font-size: 11px; }
 QLabel#step { color: #7f93ad; font-size: 11px; }
+QLabel#next {
+    color: #9fe3ff; font-size: 12px; font-weight: 600;
+    background: #0b1a30; border: 1px solid #2b57c8; border-radius: 7px;
+    padding: 7px 10px;
+}
+QPushButton[ready="true"] { border-color: #3d7bff; background: #132a4d; }
+QPushButton[ready="true"]:hover { background: #1a3866; }
 QPushButton {
     background: #10203c; color: #dceeff; border: 1px solid #1f3b6b;
     border-radius: 8px; padding: 10px 14px; text-align: left;
@@ -144,6 +151,12 @@ class Panel(QWidget):
         row.addWidget(self.btn_url)
         root.addLayout(row)
 
+        self.next_step = QLabel()
+        self.next_step.setObjectName("next")
+        self.next_step.setWordWrap(True)
+        self.next_step.hide()
+        root.addWidget(self.next_step)
+
         self.output_buttons = {}
         for kind in ("a", "b", "c"):
             button = QPushButton()
@@ -231,8 +244,23 @@ class Panel(QWidget):
     def refresh(self) -> None:
         self.status.setText(getattr(self.tray, "panel_status", i18n.t("status_idle")))
         ready = self.tray.transcript_ready
+        busy = bool(getattr(self.tray, "worker", None) and self.tray.worker.isRunning())
+
         for button in self.output_buttons.values():
             button.setEnabled(ready)
+            button.setProperty("ready", ready)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
+        if busy:
+            self.next_step.setText(i18n.t("step2_hint_transcribing"))
+            self.next_step.show()
+        elif ready:
+            self.next_step.setText(i18n.t("step2_hint"))
+            self.next_step.show()
+        else:
+            self.next_step.hide()
+
         try:
             count = len(glossary.load().pending)
         except Exception:

@@ -41,6 +41,7 @@ configs/paths.toml
 configs/models.toml
 configs/glossary.csv
 configs/settings.json
+configs/providers.json
 .env
 *.token
 

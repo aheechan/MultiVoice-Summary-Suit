@@ -17,15 +17,20 @@ RESULT = re.compile(
 )
 
 
-def bing(query: str, limit: int = 5) -> list[dict]:
-    """Scrape Bing's HTML results (no API key required)."""
+def bing(query: str, limit: int = 5) -> list[dict] | None:
+    """Scrape Bing's HTML results.
+
+    Returns None when the request itself failed (network, rate limit), and an
+    empty list when the request succeeded but matched nothing. Callers must not
+    treat a failed request as "this term does not exist".
+    """
     url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": query})
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=15) as resp:
             body = resp.read().decode("utf-8", errors="ignore")
     except Exception:
-        return []
+        return None
 
     results: list[dict] = []
     for href, title, snippet in RESULT.findall(body):

@@ -75,16 +75,15 @@ def load(config_dir: str | Path | None = None) -> Config:
     cfg.research["enabled"] = bool(prefs.get("auto_research", True))
     cfg.research["max_terms"] = int(prefs.get("max_terms", 6))
 
-    provider = prefs.get("provider")
-    if provider:
-        names = {p.get("name") for p in cfg.llm.get("providers", [])}
-        if provider in names:
-            cfg.llm["order"] = [provider]
-            model = prefs.get("model")
-            if model:
-                for item in cfg.llm.get("providers", []):
-                    if item.get("name") == provider:
-                        item["model"] = model
+    from . import providers as provider_store
+
+    stored = provider_store.load(cfg)
+    if stored:
+        cfg.llm["providers"] = [
+            dict(item, timeout_s=int(item.get("timeout_s", 180)))
+            for item in stored
+        ]
+        cfg.llm["order"] = provider_store.order(stored) or cfg.llm.get("order", [])
 
     return cfg
 

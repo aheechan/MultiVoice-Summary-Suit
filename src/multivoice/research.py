@@ -58,9 +58,13 @@ def research_term(term: str, glossary: Glossary, cfg: Config) -> tuple[dict | No
             return existing, False
 
     results = search.bing(f"{term} 是什么意思", limit=5)
+    if results is None:
+        # Request failed: do not conclude anything about the term.
+        return None, True
     if not results:
         results = search.bing(term, limit=5)
-    # No result title contains the term -> it is not a real thing. Drop it.
+        if results is None:
+            return None, True
     if not results or not any(term in item["title"] for item in results):
         return None, False
     evidence = search.format_results(results)

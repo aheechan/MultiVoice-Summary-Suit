@@ -30,6 +30,7 @@ from .. import __version__, discover, glossary, ingest, pipeline, settings
 from ..config import PROJECT_ROOT, Config
 from . import i18n
 from .panel import Panel
+from .providers_ui import ProviderManagerDialog
 from .review import ReviewDialog
 
 ASSETS = PROJECT_ROOT / "assets"
@@ -132,26 +133,13 @@ class SettingsDialog(QDialog):
         self.limit.setRange(0, 12)
         self.limit.setValue(int(prefs.get("max_terms", 6)))
 
-        self.provider = QComboBox()
-        names = [p.get("name") for p in cfg.llm.get("providers", [])] or ["local"]
-        self.provider.addItems(names)
-        current = prefs.get("provider", names[0])
-        if current in names:
-            self.provider.setCurrentText(current)
-
-        self.model = QLineEdit()
-        self.model.setText(prefs.get("model") or self._current_model(cfg, self.provider.currentText()))
-        self.provider.currentTextChanged.connect(
-            lambda name: self.model.setText(
-                prefs.get("model") or self._current_model(cfg, name)
-            )
-        )
+        self.manage = QPushButton(i18n.t("manage_providers"))
+        self.manage.clicked.connect(self.open_providers)
 
         form.addRow(self.auto)
         form.addRow(self.discover)
         form.addRow(i18n.t("max_lookups"), self.limit)
-        form.addRow(i18n.t("provider"), self.provider)
-        form.addRow(i18n.t("model"), self.model)
+        form.addRow(self.manage)
         layout.addLayout(form)
 
         self.export_button = QPushButton(i18n.t("export"))
@@ -165,12 +153,8 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    @staticmethod
-    def _current_model(cfg: Config, provider_name: str) -> str:
-        for item in cfg.llm.get("providers", []):
-            if item.get("name") == provider_name:
-                return item.get("model", "")
-        return ""
+    def open_providers(self) -> None:
+        ProviderManagerDialog(self.cfg, self).exec()
 
     def export_kb(self) -> None:
         default = str(PROJECT_ROOT / "glossary-export.json")
@@ -191,8 +175,6 @@ class SettingsDialog(QDialog):
             "auto_research": self.auto.isChecked(),
             "auto_discover": self.discover.isChecked(),
             "max_terms": self.limit.value(),
-            "provider": self.provider.currentText(),
-            "model": self.model.text().strip(),
         }
 
 
@@ -495,12 +477,8 @@ class TrayApp(QSystemTrayIcon):
         prefs = settings.save(dialog.values())
         self.cfg.research["enabled"] = prefs["auto_research"]
         self.cfg.research["max_terms"] = prefs["max_terms"]
-        self.cfg.llm["order"] = [prefs["provider"]]
-        model = prefs.get("model")
-        if model:
-            for item in self.cfg.llm.get("providers", []):
-                if item.get("name") == prefs["provider"]:
-                    item["model"] = model
+        if self.panel is not None:
+            self.panel.retranslate()
         self.showMessage(i18n.t("app_name"), i18n.t("settings_saved"),
                          QSystemTrayIcon.MessageIcon.Information, 4000)
 

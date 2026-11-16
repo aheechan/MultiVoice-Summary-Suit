@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -73,8 +73,18 @@ class Panel(QWidget):
         self.setAcceptDrops(True)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
+        root.setContentsMargins(18, 16, 18, 18)
         root.setSpacing(10)
+
+        self.logo = QLabel()
+        self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pixmap = QPixmap(str(ASSETS / "icon.png"))
+        if not pixmap.isNull():
+            self.logo.setPixmap(pixmap.scaled(
+                72, 72, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            ))
+        root.addWidget(self.logo)
 
         card = QFrame()
         card.setObjectName("card")

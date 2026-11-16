@@ -61,14 +61,21 @@ class ReviewDialog(QDialog):
             return
 
         if not self._searched:
+            import time
+
             kept = []
             for entry in self.lex.pending:
                 hits = search.bing(entry["term"], limit=3)
+                if hits is None:
+                    # Network problem: keep the term, we learned nothing.
+                    kept.append(entry)
+                    continue
                 if not hits:
-                    # Nothing on the web: treat it as a mis-transcription and drop it.
+                    # Request succeeded and found nothing: treat as mis-transcription.
                     continue
                 self._hints[entry["term"]] = [h["title"] for h in hits[:2]]
                 kept.append(entry)
+                time.sleep(0.4)
             if len(kept) != len(self.lex.pending):
                 self.lex.pending = kept
                 self.lex.save()

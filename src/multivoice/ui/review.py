@@ -4,15 +4,19 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QRadioButton,
     QScrollArea,
     QTextEdit,
     QVBoxLayout,
@@ -39,41 +43,77 @@ QCheckBox#term { color: #eaf7ff; font-size: 13px; font-weight: 600; }
 
 
 class TermEditDialog(QDialog):
-    """Fill in a pending term before writing it into the knowledge base."""
+    """Two plain-language questions, then save. No jargon fields."""
 
-    def __init__(self, term: str, hint: str = "", topics: list[str] | None = None, parent=None):
+    CATEGORIES = [
+        ("person", "q_person"),
+        ("product", "q_product"),
+        ("slang", "q_slang"),
+        ("theory", "q_theory"),
+        ("event", "q_event"),
+        ("other", "q_other"),
+    ]
+    KINDS = [
+        ("evergreen", "q_evergreen"),
+        ("product", "q_product_ttl"),
+        ("current", "q_current_ttl"),
+        ("event", "q_event_ttl"),
+    ]
+
+    def __init__(self, term: str, hint: str = "", topics: list[str] | None = None,
+                 cfg=None, parent=None):
         super().__init__(parent)
+        self.cfg = cfg
+        self._en = ""
         self.setWindowTitle(i18n.t("add_to_kb"))
-        self.resize(480, 360)
+        self.resize(520, 560)
 
         layout = QVBoxLayout(self)
-        form = QFormLayout()
+        layout.setSpacing(12)
 
         self.term = QLineEdit(term)
         self.term.setReadOnly(True)
+        layout.addWidget(self.term)
+
+        layout.addWidget(QLabel(i18n.t("edit_definition")))
         self.definition = QTextEdit()
         self.definition.setPlainText(hint)
-        self.definition.setFixedHeight(90)
-        self.en = QLineEdit()
+        self.definition.setFixedHeight(96)
+        layout.addWidget(self.definition)
 
-        self.category = QComboBox()
-        self.category.addItems(CATEGORIES)
-        self.category.setCurrentText("other")
-        self.kind = QComboBox()
-        self.kind.addItems(KINDS)
-        self.kind.setCurrentText("current")
+        what_box = QGroupBox(i18n.t("q_what"))
+        what_layout = QVBoxLayout(what_box)
+        self.category_group = QButtonGroup(self)
+        for index, (value, label) in enumerate(self.CATEGORIES):
+            radio = QRadioButton(i18n.t(label))
+            radio.setProperty("value", value)
+            self.category_group.addButton(radio, index)
+            what_layout.addWidget(radio)
+            if value == "slang":
+                radio.setChecked(True)
+        layout.addWidget(what_box)
 
+        ttl_box = QGroupBox(i18n.t("q_howlong"))
+        ttl_layout = QVBoxLayout(ttl_box)
+        self.kind_group = QButtonGroup(self)
+        for index, (value, label) in enumerate(self.KINDS):
+            radio = QRadioButton(i18n.t(label))
+            radio.setProperty("value", value)
+            self.kind_group.addButton(radio, index)
+            ttl_layout.addWidget(radio)
+            if value == "current":
+                radio.setChecked(True)
+        layout.addWidget(ttl_box)
+
+        topic_row = QHBoxLayout()
+        topic_row.addWidget(QLabel(i18n.t("topic")))
         self.topic = QComboBox()
         self.topic.setEditable(True)
         self.topic.addItems(topics or ["deepseek", "网络热词"])
+        topic_row.addWidget(self.topic, 1)
+        layout.addLayout(topic_row)
 
-        form.addRow(i18n.t("term"), self.term)
-        form.addRow(i18n.t("definition"), self.definition)
-        form.addRow("English", self.en)
-        form.addRow(i18n.t("category"), self.category)
-        form.addRow(i18n.t("kind"), self.kind)
-        form.addRow(i18n.t("topic"), self.topic)
-        layout.addLayout(form)
+        layout.addStretch(1)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
@@ -82,13 +122,39 @@ class TermEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def _checked_value(self, group: QButtonGroup) -> str:
+        button = group.checkedButton()
+        return button.property("value") if button else "other"
+
+    def _translate(self, text: str) -> str:
+        if self.cfg is None:
+            return ""
+        try:
+            from .. import llm
+
+            answer = llm.chat(
+                [{"role": "user", "content":
+                  "Translate the following glossary definition into one concise English "
+                  f"sentence. Output only the translation.\n\n{text}"}],
+                self.cfg, temperature=0.0, max_tokens=256,
+            )
+            return answer.strip()
+        except Exception:
+            return ""
+
+    def accept(self) -> None:
+        text = self.definition.toPlainText().strip()
+        if text and not self._en:
+            self._en = self._translate(text)
+        super().accept()
+
     def values(self) -> dict:
         return {
             "term": self.term.text().strip(),
             "definition": self.definition.toPlainText().strip(),
-            "en": self.en.text().strip(),
-            "category": self.category.currentText(),
-            "kind": self.kind.currentText(),
+            "en": self._en,
+            "category": self._checked_value(self.category_group),
+            "kind": self._checked_value(self.kind_group),
             "topic": self.topic.currentText().strip(),
         }
 
@@ -238,7 +304,8 @@ class ReviewDialog(QDialog):
 
     def add_selected(self) -> None:
         for term in self.selected_terms():
-            dialog = TermEditDialog(term, self._hints.get(term, ""), list(self.lex.topics), self)
+            dialog = TermEditDialog(term, self._hints.get(term, ""),
+                                    list(self.lex.topics), self.cfg, self)
             if not dialog.exec():
                 continue
             values = dialog.values()

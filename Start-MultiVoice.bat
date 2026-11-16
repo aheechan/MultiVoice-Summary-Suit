@@ -32,9 +32,9 @@ if errorlevel 1 (
 
 echo Starting tray app...
 if "%~1"=="" (
-  start "" "%PYW%" -m multivoice.ui.tray
+  start "" "%PYW%" -m multivoice.ui.tray --panel
 ) else (
-  start "" "%PYW%" -m multivoice.ui.tray --input "%~1"
+  start "" "%PYW%" -m multivoice.ui.tray --panel --input "%~1"
 )
 
 timeout /t 3 >nul

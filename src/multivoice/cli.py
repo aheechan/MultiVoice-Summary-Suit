@@ -172,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
 
     tray_parser = sub.add_parser("tray", help="start the system tray app")
     tray_parser.add_argument("--input", default=None, help="start a job immediately")
+    tray_parser.add_argument("--panel", action="store_true", help="open the main panel")
 
     gloss = sub.add_parser("glossary", help="manage the slang/term lexicon")
     gloss_sub = gloss.add_subparsers(dest="glossary_command", required=True)
@@ -213,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         from .ui.tray import run_tray
 
         initial = Path(args.input) if args.input else None
-        return run_tray(cfg, initial)
+        return run_tray(cfg, initial, getattr(args, "panel", False))
 
     if args.command == "glossary":
         return glossary_command(args, cfg)

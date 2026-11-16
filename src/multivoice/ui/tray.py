@@ -23,8 +23,10 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import __version__, pipeline, settings
+from .. import __version__, glossary, pipeline, settings
 from ..config import PROJECT_ROOT, Config
+from .panel import Panel
+from .review import ReviewDialog
 
 ASSETS = PROJECT_ROOT / "assets"
 APP_NAME = "MultiVoice Summary Suit"
@@ -126,6 +128,9 @@ class TrayApp(QSystemTrayIcon):
         self.last_output: Path | None = None
         self.transcript_ready = False
         self.outputs_ready = False
+        self.panel_status = "Idle"
+        self.panel: Panel | None = None
+        self.review_dialog: ReviewDialog | None = None
 
         self.setToolTip(APP_NAME)
 
@@ -158,6 +163,12 @@ class TrayApp(QSystemTrayIcon):
         self.action_config = QAction("Open config folder", self)
         self.action_config.triggered.connect(lambda: self._open(PROJECT_ROOT / "configs"))
 
+        self.action_panel = QAction("Open panel", self)
+        self.action_panel.triggered.connect(self.open_panel)
+
+        self.action_review = QAction("Review pending terms…", self)
+        self.action_review.triggered.connect(self.open_review)
+
         self.action_settings = QAction("Settings…", self)
         self.action_settings.triggered.connect(self.show_settings)
 
@@ -175,6 +186,8 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addSeparator()
         self.menu.addAction(self.action_status)
         self.menu.addSeparator()
+        self.menu.addAction(self.action_panel)
+        self.menu.addAction(self.action_review)
         self.menu.addMenu(self.output_menu)
         self.menu.addAction(self.action_output_dir)
         self.menu.addAction(self.action_config)
@@ -194,6 +207,14 @@ class TrayApp(QSystemTrayIcon):
         self.action_generate.setEnabled(not busy and self.transcript_ready)
         for key, action in self.output_actions.items():
             action.setEnabled(self._output_path(key) is not None)
+        try:
+            pending = len(glossary.load().pending)
+        except Exception:
+            pending = 0
+        self.action_review.setText(f"Review pending terms ({pending})…")
+        self.action_review.setEnabled(pending > 0)
+        if self.panel is not None:
+            self.panel.refresh()
 
     def _output_path(self, kind: str) -> Path | None:
         out = self.last_output
@@ -219,6 +240,38 @@ class TrayApp(QSystemTrayIcon):
     def _on_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.menu.popup(self.geometry().center())
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self.open_panel()
+
+    def open_panel(self) -> None:
+        if self.panel is None:
+            self.panel = Panel(self)
+        self.panel.refresh()
+        self.panel.show()
+        self.panel.raise_()
+        self.panel.activateWindow()
+
+    def open_review(self) -> None:
+        if self.review_dialog is None:
+            self.review_dialog = ReviewDialog(self.cfg)
+        self.review_dialog.exec()
+        self.review_dialog = None
+        self._refresh()
+
+    def check_pending(self) -> None:
+        try:
+            count = len(glossary.load().pending)
+        except Exception:
+            count = 0
+        self._refresh()
+        if count:
+            self.showMessage(
+                APP_NAME,
+                f"{count} term(s) need review.\nRight-click the tray icon → "
+                "Review pending terms.",
+                QSystemTrayIcon.MessageIcon.Information,
+                9000,
+            )
 
     # ------------------------------------------------------------------ actions
     def pick_file(self) -> None:
@@ -233,7 +286,8 @@ class TrayApp(QSystemTrayIcon):
             return
 
         self.last_source = source
-        self.action_status.setText(f"Working: {source.name}")
+        self.panel_status = f"Working: {source.name}"
+        self.action_status.setText(self.panel_status)
         self.setToolTip(f"{APP_NAME} — working on {source.name}")
         self.showMessage(APP_NAME, f"Started: {source.name}",
                          QSystemTrayIcon.MessageIcon.Information, 3000)
@@ -248,6 +302,7 @@ class TrayApp(QSystemTrayIcon):
         self.last_output = Path(output)
         if stage == "transcribe":
             self.transcript_ready = True
+            self.panel_status = "Transcript ready"
             self.action_status.setText("Transcript ready")
             self.showMessage(
                 APP_NAME,
@@ -257,6 +312,7 @@ class TrayApp(QSystemTrayIcon):
             )
         else:
             self.outputs_ready = True
+            self.panel_status = "Outputs ready"
             self.action_status.setText("Outputs ready")
             self.showMessage(
                 APP_NAME,
@@ -267,6 +323,7 @@ class TrayApp(QSystemTrayIcon):
         self._refresh()
 
     def on_error(self, message: str) -> None:
+        self.panel_status = "Failed"
         self.action_status.setText("Failed")
         self.setToolTip(APP_NAME)
         self.showMessage(APP_NAME, f"Job failed:\n{message[:300]}",
@@ -332,7 +389,8 @@ class TrayApp(QSystemTrayIcon):
         QApplication.quit()
 
 
-def run_tray(cfg: Config, initial: Path | None = None) -> int:
+def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
+             show_review: bool = False) -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setQuitOnLastWindowClosed(False)
@@ -344,6 +402,18 @@ def run_tray(cfg: Config, initial: Path | None = None) -> int:
 
     tray = TrayApp(cfg)
     tray.show()
+
+    if show_panel:
+        QTimer.singleShot(300, tray.open_panel)
+    if show_review:
+        QTimer.singleShot(600, tray.open_review)
+
+    # Daily review reminder: check at startup and then once a day.
+    QTimer.singleShot(3000, tray.check_pending)
+    daily = QTimer(tray)
+    daily.setInterval(24 * 60 * 60 * 1000)
+    daily.timeout.connect(tray.check_pending)
+    daily.start()
 
     QTimer.singleShot(
         1200,
@@ -372,18 +442,22 @@ def main() -> int:
     from ..config import load
 
     initial = None
+    show_panel = False
     argv = sys.argv[1:]
     if "--input" in argv:
         index = argv.index("--input")
         if index + 1 < len(argv):
             initial = Path(argv[index + 1])
+    if "--panel" in argv:
+        show_panel = True
+    show_review = "--review" in argv
 
     log = PROJECT_ROOT / "work" / "tray-error.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     try:
         with log.open("a", encoding="utf-8") as handle:
-            handle.write(f"main() entered {initial}\n")
-        return run_tray(load(), initial)
+            handle.write(f"main() entered {initial} panel={show_panel} review={show_review}\n")
+        return run_tray(load(), initial, show_panel, show_review)
     except Exception:
         with log.open("a", encoding="utf-8") as handle:
             traceback.print_exc(file=handle)

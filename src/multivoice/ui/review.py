@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -47,10 +48,16 @@ class TermEditDialog(QDialog):
 
     CATEGORIES = [
         ("person", "q_person"),
+        ("organization", "q_org"),
         ("product", "q_product"),
+        ("tool", "q_tool"),
+        ("instrument", "q_instrument"),
+        ("work", "q_work"),
+        ("concept", "q_concept"),
         ("slang", "q_slang"),
         ("theory", "q_theory"),
         ("event", "q_event"),
+        ("place", "q_place"),
         ("other", "q_other"),
     ]
     KINDS = [
@@ -82,13 +89,15 @@ class TermEditDialog(QDialog):
         layout.addWidget(self.definition)
 
         what_box = QGroupBox(i18n.t("q_what"))
-        what_layout = QVBoxLayout(what_box)
+        what_layout = QGridLayout(what_box)
+        what_layout.setHorizontalSpacing(18)
+        what_layout.setVerticalSpacing(6)
         self.category_group = QButtonGroup(self)
         for index, (value, label) in enumerate(self.CATEGORIES):
             radio = QRadioButton(i18n.t(label))
             radio.setProperty("value", value)
             self.category_group.addButton(radio, index)
-            what_layout.addWidget(radio)
+            what_layout.addWidget(radio, index // 2, index % 2)
             if value == "slang":
                 radio.setChecked(True)
         layout.addWidget(what_box)

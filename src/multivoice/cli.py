@@ -103,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
     probe_parser = sub.add_parser("probe", help="report speech chunks and BGM level")
     probe_parser.add_argument("--input", required=True)
 
+    tray_parser = sub.add_parser("tray", help="start the system tray app")
+    tray_parser.add_argument("--input", default=None, help="start a job immediately")
+
     run_parser = sub.add_parser("run", help="process one file or URL")
     run_parser.add_argument("--input", required=True)
     run_parser.add_argument("--lang", default="auto")
@@ -122,6 +125,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "probe":
         return probe_file(Path(args.input), cfg)
+
+    if args.command == "tray":
+        from .ui.tray import run_tray
+
+        initial = Path(args.input) if args.input else None
+        return run_tray(cfg, initial)
 
     stages = tuple(s.strip() for s in args.stages.split(",") if s.strip())
     out = pipeline.run(

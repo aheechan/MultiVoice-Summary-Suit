@@ -4,7 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from . import asr, bgm, correct, generate, ingest, structure, translate, vad
+from . import (asr, bgm, classify, correct, generate, ingest, structure,
+               translate, vad, verify)
 from .asr import Segment
 from .config import Config
 
@@ -103,10 +104,30 @@ def run(
             _write(raw_json, json.dumps([s.to_dict() for s in segments],
                                         ensure_ascii=False, indent=2))
 
-        if "correct" in stages:
-            segments = correct.correct_segments(segments, cfg)
-            _write(fixed_json, json.dumps([s.to_dict() for s in segments],
-                                          ensure_ascii=False, indent=2))
+    context: dict = {"domain": "other", "label": "其他", "terms": []}
+    evidence = ""
+    already_corrected = bool(resume and fixed_json.exists())
+    if "correct" in stages and not already_corrected:
+        if resume and (job / "context.json").exists():
+            saved = json.loads((job / "context.json").read_text(encoding="utf-8"))
+            context = saved.get("classify", context)
+            evidence = saved.get("evidence", "")
+        else:
+            head = "\n".join(seg.text for seg in segments)[:3000]
+            context = classify.classify(head, cfg)
+            evidence, items = verify.build_evidence(context["terms"], cfg)
+            findings = verify.suggest(items, evidence)
+            _write(job / "context.json", json.dumps(
+                {"classify": context, "evidence": evidence, "findings": findings},
+                ensure_ascii=False, indent=2))
+            if findings:
+                _write(out / "verification.md", verify.to_markdown(findings))
+
+        segments = correct.correct_segments(
+            segments, cfg, domain=context.get("label", ""), evidence=evidence
+        )
+        _write(fixed_json, json.dumps([s.to_dict() for s in segments],
+                                      ensure_ascii=False, indent=2))
 
     transcript = "\n".join(seg.text for seg in segments)
     _write(job / "transcript.txt", transcript)
@@ -141,6 +162,7 @@ def run(
         "source": str(source),
         "language": source_lang,
         "job": job.name,
+        "domain": context.get("domain", "other"),
         "segments": len(segments),
         "units": len(units),
         "bgm": background,

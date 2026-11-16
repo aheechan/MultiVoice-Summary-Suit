@@ -24,9 +24,37 @@ enabled = false
 model = "audio/demucs-htdemucs-ft"
 
 [llm]
-# 任意 OpenAI 兼容端点（本地 llama-server 或云端）
-base_url = "http://127.0.0.1:8095/v1"
-model = "local"
-api_key = "EMPTY"
 temperature = 0.2
+# Qwen3 等带思考模式的模型必须开启，否则推理会占满输出预算
+no_think = true
+# 按顺序尝试，前一个失败自动回落
+order = ["local"]
+
+[[llm.providers]]
+name = "local"
+base_url = "http://127.0.0.1:8095/v1"
+model = "qwen3-1.7b"
+api_key = "EMPTY"
 timeout_s = 180
+
+[[llm.providers]]
+name = "lan"
+base_url = "http://192.168.1.10:8000/v1"
+model = "your-lan-model"
+api_key = "EMPTY"
+timeout_s = 180
+enabled = false
+
+[[llm.providers]]
+name = "cloud"
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-chat"
+api_key_env = "DEEPSEEK_API_KEY"
+timeout_s = 120
+enabled = false
+
+[verify]
+# 用维基百科核对人名、地名、事件、数字
+enabled = true
+wiki_lang = ["zh", "en"]
+max_terms = 8

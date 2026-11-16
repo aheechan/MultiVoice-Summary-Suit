@@ -45,9 +45,28 @@ python -m multivoice doctor
 
 # 3. 跑一条
 python -m multivoice run --input "D:\media\sample.mp4" --lang auto
+
+# 4. 托盘界面（全英文）
+python -m multivoice tray
 ```
 
 产物默认写到 `D:\Local Repositories\MultiVoice-Summary-Suit\output\<job-id>\`。
+
+## 托盘界面
+
+<p align="center"><img src="assets/icon.png" width="120" alt="MultiVoice Summary Suit"></p>
+
+常驻系统托盘，右键菜单：
+
+| 菜单项 | 作用 |
+|---|---|
+| **Transcribe file…** | 选一个音视频文件，后台跑完整流程 |
+| **Open output folder** | 打开成品目录 |
+| **Open config folder** | 打开配置目录 |
+| **About** | 版本与说明 |
+| **Quit** | 退出 |
+
+任务在后台线程执行，完成后弹系统通知；失败会显示错误摘要。所有界面文案均为英文。
 
 ## 文档
 

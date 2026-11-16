@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="MultiVoice Summary Suit">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="44%" r="68%">
+      <stop offset="0%" stop-color="#0d1c37"/>
+      <stop offset="48%" stop-color="#070b16"/>
+      <stop offset="100%" stop-color="#020308"/>
+    </radialGradient>
+
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6fb4ff"/>
+      <stop offset="55%" stop-color="#2b57c8"/>
+      <stop offset="100%" stop-color="#101f45"/>
+    </linearGradient>
+
+    <linearGradient id="wave" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#b9f0ff"/>
+      <stop offset="45%" stop-color="#4d8dff"/>
+      <stop offset="100%" stop-color="#8fe0ff"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#5fb2ff" stop-opacity="0.55"/>
+      <stop offset="70%" stop-color="#1b3f8a" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+
+    <clipPath id="lens">
+      <circle cx="128" cy="128" r="84"/>
+    </clipPath>
+  </defs>
+
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="118" fill="url(#glow)"/>
+
+  <circle cx="128" cy="128" r="100" fill="none" stroke="url(#ring)" stroke-width="1.2" opacity="0.35"/>
+  <circle cx="128" cy="128" r="86" fill="none" stroke="url(#ring)" stroke-width="2.4" opacity="0.95"/>
+  <circle cx="128" cy="128" r="70" fill="none" stroke="#23478f" stroke-width="1" opacity="0.7"/>
+  <circle cx="128" cy="128" r="54" fill="none" stroke="#183163" stroke-width="0.8" opacity="0.45"/>
+
+  <g clip-path="url(#lens)" fill="url(#wave)">
+    <rect x="60"  y="112" width="7" height="32"  rx="3.5"/>
+    <rect x="75"  y="96"  width="7" height="64"  rx="3.5"/>
+    <rect x="90"  y="78"  width="7" height="100" rx="3.5"/>
+    <rect x="105" y="62"  width="7" height="132" rx="3.5"/>
+    <rect x="120" y="46"  width="7" height="164" rx="3.5"/>
+    <rect x="135" y="62"  width="7" height="132" rx="3.5"/>
+    <rect x="150" y="78"  width="7" height="100" rx="3.5"/>
+    <rect x="165" y="96"  width="7" height="64"  rx="3.5"/>
+    <rect x="180" y="112" width="7" height="32"  rx="3.5"/>
+  </g>
+
+  <circle cx="128" cy="128" r="3.6" fill="#d8f6ff"/>
+  <circle cx="128" cy="128" r="52" fill="none" stroke="#9fd8ff" stroke-width="0.6" opacity="0.25"/>
+</svg>

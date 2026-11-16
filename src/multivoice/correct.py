@@ -35,7 +35,13 @@ def _chunks(segments: list[Segment], limit: int = 1200) -> list[list[Segment]]:
     return chunks
 
 
-def correct_segments(segments: list[Segment], cfg: Config) -> list[Segment]:
+def correct_segments(
+    segments: list[Segment],
+    cfg: Config,
+    *,
+    domain: str = "",
+    evidence: str = "",
+) -> list[Segment]:
     """Correct ASR errors paragraph by paragraph. Never rewrites content."""
     template = PROMPT.read_text(encoding="utf-8")
     glossary = load_glossary()
@@ -43,7 +49,13 @@ def correct_segments(segments: list[Segment], cfg: Config) -> list[Segment]:
     corrected: list[Segment] = []
     for group in _chunks(segments):
         source = "\n".join(seg.text for seg in group)
-        prompt = template.replace("{{GLOSSARY}}", glossary).replace("{{TEXT}}", source)
+        prompt = (
+            template
+            .replace("{{DOMAIN}}", domain or "未指定")
+            .replace("{{GLOSSARY}}", glossary)
+            .replace("{{EVIDENCE}}", evidence or "（无）")
+            .replace("{{TEXT}}", source)
+        )
         answer = chat([{"role": "user", "content": prompt}], cfg, temperature=0.0,
                       max_tokens=max(512, len(source)))
         lines = [line.strip() for line in answer.splitlines() if line.strip()]

@@ -184,6 +184,21 @@ def run_tray(cfg: Config, initial: Path | None = None) -> int:
 
 
 def main() -> int:
+    import traceback
+
     from ..config import load
 
-    return run_tray(load())
+    log = PROJECT_ROOT / "work" / "tray-error.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with log.open("a", encoding="utf-8") as handle:
+            handle.write("main() entered\n")
+        return run_tray(load())
+    except Exception:
+        with log.open("a", encoding="utf-8") as handle:
+            traceback.print_exc(file=handle)
+        raise
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

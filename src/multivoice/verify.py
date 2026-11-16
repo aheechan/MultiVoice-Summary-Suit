@@ -8,6 +8,16 @@ from .config import Config
 QUOTED = re.compile(r"[「“\"']([^」”\"']{1,16})[」”\"']")
 
 
+def _mentions(snippet: str, anchors: set[str]) -> bool:
+    """Match simplified/traditional variants by comparing the first two characters."""
+    for anchor in anchors:
+        if anchor in snippet:
+            return True
+        if len(anchor) >= 2 and anchor[:2] in snippet:
+            return True
+    return False
+
+
 def build_evidence(terms: list[str], cfg: Config) -> tuple[str, list[dict]]:
     """Collect encyclopedia snippets used to fact-check the transcript."""
     if not cfg.verify.get("enabled", True) or not terms:
@@ -38,7 +48,7 @@ def suggest(items: list[dict], evidence: str) -> list[dict]:
         candidates: list[str] = []
         for source in items:
             for hit in source["hits"]:
-                if not any(a in hit["snippet"] for a in anchors):
+                if not _mentions(hit["snippet"], anchors):
                     continue
                 for quoted in QUOTED.findall(hit["snippet"]):
                     if quoted and quoted != term and quoted not in all_terms:

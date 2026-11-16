@@ -11,6 +11,24 @@ from .config import Config
 
 ALL_STAGES = ("asr", "correct", "translate", "extract", "generate")
 
+# ASR engines report language names or odd codes ("ch", "Chinese", "zh-cn").
+LANG_ALIASES = {
+    "ch": "zh", "cn": "zh", "chi": "zh", "zho": "zh", "zh-cn": "zh", "zh-tw": "zh",
+    "chinese": "zh", "mandarin": "zh", "yue": "zh",
+    "eng": "en", "english": "en",
+    "jpn": "ja", "japanese": "ja",
+    "kor": "ko", "korean": "ko",
+}
+
+
+def _norm_lang(code: str) -> str:
+    value = (code or "").strip().lower().replace("_", "-")
+    if not value or value == "auto":
+        return ""
+    if value in LANG_ALIASES:
+        return LANG_ALIASES[value]
+    return value[:2]
+
 
 def _job_dir(cfg: Config, source: Path) -> Path:
     """Stable job id = content hash, so re-runs resume instead of duplicating."""
@@ -135,7 +153,7 @@ def run(
     background = bgm.analyze(audio)
     _write(job / "bgm.json", json.dumps(background, ensure_ascii=False, indent=2))
 
-    source_lang = (detected or "").lower()[:2] or "zh"
+    source_lang = _norm_lang(detected) or "zh"
     if "translate" in stages:
         paras = translate.paragraphs(segments, source_lang)
         for target in cfg.languages:
@@ -154,9 +172,10 @@ def run(
             _write(units_json, json.dumps(units, ensure_ascii=False, indent=2))
 
     if "generate" in stages and units:
+        transcript_text = "\n".join(seg.text for seg in segments)
         _write(out / "a-script.md", generate.clean_script(segments, cfg))
-        _write(out / "b-report.md", generate.report(units, cfg))
-        _write(out / "c-brief.md", generate.brief(units, cfg))
+        _write(out / "b-report.md", generate.report(units, cfg, transcript_text))
+        _write(out / "c-brief.md", generate.brief(units, cfg, transcript_text))
 
     manifest = {
         "source": str(source),

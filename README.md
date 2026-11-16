@@ -56,17 +56,30 @@ python -m multivoice tray
 
 <p align="center"><img src="assets/icon.png" width="120" alt="MultiVoice Summary Suit"></p>
 
-常驻系统托盘，右键菜单：
+双击 `Start-MultiVoice.bat` 启动，也可以把音视频文件直接拖到 bat 上，立即开始转写。
 
-| 菜单项 | 作用 |
+工作流是**两段式**，先看文稿再出成品：
+
+| 步骤 | 操作 | 结果 |
+|---|---|---|
+| 1 | **Transcribe file…** | 识别 + 纠错 + 双语文本 |
+| 2 | **Open outputs → Transcript** | 核对原文、译文、对照稿 |
+| 3 | **Generate outputs (a / b / c)** | 生成口播稿、知识报告、快报 |
+
+`Open outputs` 子菜单会列出六个入口，文件不存在时自动置灰：
+
+| 菜单项 | 文件 |
 |---|---|
-| **Transcribe file…** | 选一个音视频文件，后台跑完整流程 |
-| **Open output folder** | 打开成品目录 |
-| **Open config folder** | 打开配置目录 |
-| **About** | 版本与说明 |
-| **Quit** | 退出 |
+| Transcript · original | `text\original.txt` |
+| Transcript · translation | `text\translated.<lang>.txt` |
+| Transcript · side by side | `text\bilingual.<src>-<tgt>.txt` |
+| A · Spoken script | `a-script.md` |
+| B · Knowledge report | `b-report.md` |
+| C · Brief | `c-brief.md` |
 
-任务在后台线程执行，完成后弹系统通知；失败会显示错误摘要。所有界面文案均为英文。
+所有界面文案为英文，任务在后台线程执行，完成与失败都会弹系统通知。
+
+> 生成阶段有防编造守卫：如果模型输出的长度超过原文的 1.3–1.6 倍，直接回退到原文，宁可简短也不产出虚构内容。
 
 ## 文档
 

@@ -180,6 +180,9 @@ def main(argv: list[str] | None = None) -> int:
     gloss_sub.add_parser("stale", help="show entries that need re-checking")
     gloss_sub.add_parser("pending", help="show terms that could not be verified")
     gloss_sub.add_parser("stats", help="show lexicon statistics")
+
+    discover_parser = sub.add_parser("discover", help="queue fresh terms for review")
+    discover_parser.add_argument("--per-topic", type=int, default=6)
     add_parser = gloss_sub.add_parser("add", help="add or update an entry")
     add_parser.add_argument("--term", required=True)
     add_parser.add_argument("--alias", action="append", default=[])
@@ -218,6 +221,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "glossary":
         return glossary_command(args, cfg)
+
+    if args.command == "discover":
+        from . import discover, glossary
+
+        lex = glossary.load()
+        result = discover.run(lex, cfg, per_topic=args.per_topic)
+        print(f"queued {result['queued']} term(s) from {', '.join(result['topics'])}")
+        return 0
 
     stages = tuple(s.strip() for s in args.stages.split(",") if s.strip())
     out = pipeline.run(

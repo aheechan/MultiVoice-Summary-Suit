@@ -8,8 +8,10 @@ SETTINGS_PATH = PROJECT_ROOT / "configs" / "settings.json"
 
 DEFAULTS = {
     "auto_research": True,
+    "auto_discover": True,
     "max_terms": 6,
     "provider": "local",
+    "language": "en",
 }
 
 

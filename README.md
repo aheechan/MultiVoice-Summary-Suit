@@ -87,8 +87,12 @@ mvs glossary research --term 新梗
 | 项 | 说明 |
 |---|---|
 | Research unknown terms on the web | 是否自动联网核实新词/过期词 |
+| Search for new terms every day | 每天空闲时自动搜索新词，塞进待审队列 |
 | Max lookups per job | 单次任务最多查几个词（控制耗时） |
 | Model provider | `local` / `lan` / `cloud` 三选一 |
+| **Export knowledge base…** | 把词条、主题、待审队列导出成一个 JSON |
+
+每日自动搜索：启动 15 秒后跑一次（若当前没有任务），之后每 24 小时一次。发现的候选只进入待审队列，不会直接入库。待审词条 14 天或 3 次尝试后自动清除。
 
 设置写在 `configs/settings.json`，下次任务生效。
 
@@ -118,7 +122,17 @@ api_key_env = "DEEPSEEK_API_KEY"
 |---|---|---|
 | 1 | **Transcribe file…** | 识别 + 纠错 + 双语文本 |
 | 2 | **Open outputs → Transcript** | 核对原文、译文、对照稿 |
-| 3 | **Generate outputs (a / b / c)** | 生成口播稿、知识报告、快报 |
+| 3 | 三选一：**Clean spoken script** / **Knowledge report** / **Brief** | 只生成你选的那一份 |
+
+三个成品按钮各自标注了产出内容：
+
+| 按钮 | 产出 |
+|---|---|
+| Clean spoken script | 可直接朗读的第一人称稿，去掉口癖与废话 |
+| Knowledge report | 逐点讲解：是什么 / 为什么 / 怎么做 / 边界 |
+| Brief | 300–600 字摘要，附要点清单 |
+
+界面支持 **EN / ZH 切换**，主界面、托盘菜单、审查窗口、设置窗口全部跟随切换。
 
 `Open outputs` 子菜单会列出六个入口，文件不存在时自动置灰：
 

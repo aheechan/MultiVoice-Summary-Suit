@@ -128,6 +128,20 @@ class Glossary:
             self.save()
         return dropped
 
+    def export(self, target: Path) -> Path:
+        """Write the whole knowledge base as one portable JSON file."""
+        payload = {
+            "exported_at": _today(),
+            "topics": self.topics,
+            "entries": self.entries,
+            "pending": self.pending,
+        }
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return target
+
     def stats(self) -> dict:
         kinds: dict[str, int] = {}
         stale = 0

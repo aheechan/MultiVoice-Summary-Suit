@@ -1,6 +1,7 @@
-"""Daily review dialog for terms that could not be confirmed automatically."""
+"""Review dialog for terms that could not be confirmed automatically."""
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDialog,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from .. import glossary, research
 from ..config import PROJECT_ROOT
+from . import i18n
 
 ASSETS = PROJECT_ROOT / "assets"
 
@@ -24,29 +26,21 @@ class ReviewDialog(QDialog):
         self.cfg = cfg
         self.lex = glossary.load()
 
-        self.setWindowTitle("Pending terms")
+        self.setWindowTitle(i18n.t("review_title"))
         self.setWindowIcon(QIcon(str(ASSETS / "icon.png")))
-        self.resize(520, 380)
+        self.resize(560, 400)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(
-            "These terms were found online but could not be confirmed.\n"
-            "Research them again, or drop them from the queue."
-        ))
+        layout.addWidget(QLabel(i18n.t("review_hint")))
 
         self.list = QListWidget()
         self.list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        for item in self.lex.pending:
-            entry = QListWidgetItem(
-                f"{item['term']}   x{item.get('count', 1)}   {item.get('reason', '')}"
-            )
-            entry.setData(1, item["term"])
-            self.list.addItem(entry)
+        self.reload()
         layout.addWidget(self.list)
 
         row = QDialogButtonBox()
-        self.btn_research = QPushButton("Research selected")
-        self.btn_drop = QPushButton("Drop selected")
+        self.btn_research = QPushButton(i18n.t("research_selected"))
+        self.btn_drop = QPushButton(i18n.t("drop_selected"))
         row.addButton(self.btn_research, QDialogButtonBox.ButtonRole.ActionRole)
         row.addButton(self.btn_drop, QDialogButtonBox.ButtonRole.ActionRole)
         row.addButton(QDialogButtonBox.StandardButton.Close)
@@ -56,25 +50,33 @@ class ReviewDialog(QDialog):
         self.btn_research.clicked.connect(self.research_selected)
         self.btn_drop.clicked.connect(self.drop_selected)
 
+    def reload(self) -> None:
+        self.list.clear()
+        if not self.lex.pending:
+            item = QListWidgetItem(i18n.t("nothing_pending"))
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
+            self.list.addItem(item)
+            return
+        for entry in self.lex.pending:
+            item = QListWidgetItem(
+                f"{entry['term']}   x{entry.get('count', 1)}   {entry.get('reason', '')}"
+            )
+            item.setData(1, entry["term"])
+            self.list.addItem(item)
+
     def selected_terms(self) -> list[str]:
-        return [i.data(1) for i in self.list.selectedItems()]
+        return [i.data(1) for i in self.list.selectedItems() if i.data(1)]
 
     def research_selected(self) -> None:
         for term in self.selected_terms():
             entry, ambiguous = research.research_term(term, self.lex, self.cfg)
             if entry:
                 self.lex.resolve_pending(term)
-                for i in range(self.list.count()):
-                    if self.list.item(i).data(1) == term:
-                        self.list.takeItem(i)
-                        break
             elif ambiguous:
                 self.lex.queue(term, reason="still unconfirmed")
+        self.reload()
 
     def drop_selected(self) -> None:
         for term in self.selected_terms():
             self.lex.resolve_pending(term)
-            for i in range(self.list.count()):
-                if self.list.item(i).data(1) == term:
-                    self.list.takeItem(i)
-                    break
+        self.reload()

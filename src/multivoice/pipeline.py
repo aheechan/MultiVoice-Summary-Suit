@@ -87,6 +87,7 @@ def run(
     language: str = "auto",
     stages: tuple[str, ...] = ALL_STAGES,
     resume: bool = True,
+    outputs: tuple[str, ...] = ("a", "b", "c"),
 ) -> Path:
     source = Path(source)
     if not source.exists():
@@ -207,9 +208,12 @@ def run(
 
     if "generate" in stages and units:
         transcript_text = "\n".join(seg.text for seg in segments)
-        _write(out / "a-script.md", generate.clean_script(segments, cfg))
-        _write(out / "b-report.md", generate.report(units, cfg, transcript_text))
-        _write(out / "c-brief.md", generate.brief(units, cfg, transcript_text))
+        if "a" in outputs:
+            _write(out / "a-script.md", generate.clean_script(segments, cfg))
+        if "b" in outputs:
+            _write(out / "b-report.md", generate.report(units, cfg, transcript_text))
+        if "c" in outputs:
+            _write(out / "c-brief.md", generate.brief(units, cfg, transcript_text))
 
     manifest = {
         "source": str(source),

@@ -1,4 +1,4 @@
-"""System tray application (English UI)."""
+"""System tray application (English/Chinese UI)."""
 from __future__ import annotations
 
 import os
@@ -18,31 +18,19 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QMenu,
     QMessageBox,
+    QPushButton,
     QSpinBox,
     QSystemTrayIcon,
     QVBoxLayout,
 )
 
-from .. import __version__, glossary, pipeline, settings
+from .. import __version__, discover, glossary, pipeline, settings
 from ..config import PROJECT_ROOT, Config
+from . import i18n
 from .panel import Panel
 from .review import ReviewDialog
 
 ASSETS = PROJECT_ROOT / "assets"
-APP_NAME = "MultiVoice Summary Suit"
-
-
-def app_icon() -> QIcon:
-    """Multi-resolution icon: the compact artwork carries the 16–48 px sizes."""
-    icon = QIcon()
-    for size in (16, 24, 32, 48):
-        path = ASSETS / f"icon-{size}.png"
-        if path.exists():
-            icon.addFile(str(path), QSize(size, size))
-    detailed = ASSETS / "icon.svg"
-    if detailed.exists():
-        icon.addFile(str(detailed))
-    return icon
 
 AUDIO_FILTER = (
     "Media files (*.mp4 *.mkv *.mov *.webm *.mp3 *.wav *.m4a *.flac *.aac);;"
@@ -53,39 +41,71 @@ TRANSCRIBE_STAGES = ("asr", "correct", "translate")
 GENERATE_STAGES = ("extract", "generate")
 
 
+def app_icon() -> QIcon:
+    icon = QIcon()
+    for size in (16, 24, 32, 48):
+        path = ASSETS / f"icon-{size}.png"
+        if path.exists():
+            icon.addFile(str(path), QSize(size, size))
+    detailed = ASSETS / "icon.svg"
+    if detailed.exists():
+        icon.addFile(str(detailed))
+    return icon
+
+
 class Worker(QThread):
-    done = Signal(str, str)   # output dir, stage
+    done = Signal(str, str, str)   # output dir, stage, output kind
     failed = Signal(str)
 
-    def __init__(self, source: Path, cfg: Config, stages: tuple[str, ...], stage: str):
+    def __init__(self, source: Path, cfg: Config, stages: tuple[str, ...],
+                 stage: str, outputs: tuple[str, ...] = ("a", "b", "c")):
         super().__init__()
         self.source = source
         self.cfg = cfg
         self.stages = stages
         self.stage = stage
+        self.outputs = outputs
 
     def run(self) -> None:  # noqa: D401
         try:
-            out = pipeline.run(self.source, self.cfg, stages=self.stages)
-            self.done.emit(str(out), self.stage)
-        except Exception as exc:  # surface any pipeline failure in the tray
+            out = pipeline.run(self.source, self.cfg, stages=self.stages,
+                               outputs=self.outputs)
+            self.done.emit(str(out), self.stage, ",".join(self.outputs))
+        except Exception as exc:
             self.failed.emit(str(exc))
 
 
-class SettingsDialog(QDialog):
-    """Minimal runtime settings: auto research, lookup budget, provider."""
+class DiscoverWorker(QThread):
+    finished_ok = Signal(int)
 
     def __init__(self, cfg: Config):
         super().__init__()
-        self.setWindowTitle("Settings")
+        self.cfg = cfg
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            lex = glossary.load()
+            result = discover.run(lex, self.cfg, per_topic=6)
+            self.finished_ok.emit(int(result.get("queued", 0)))
+        except Exception:
+            self.finished_ok.emit(0)
+
+
+class SettingsDialog(QDialog):
+    def __init__(self, cfg: Config, parent=None):
+        super().__init__(parent)
+        self.cfg = cfg
+        self.setWindowTitle(i18n.t("settings").rstrip("…"))
         self.setWindowIcon(app_icon())
         prefs = settings.load()
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
-        self.auto = QCheckBox("Research unknown terms on the web")
+        self.auto = QCheckBox(i18n.t("auto_research"))
         self.auto.setChecked(bool(prefs.get("auto_research", True)))
+        self.discover = QCheckBox(i18n.t("auto_discover"))
+        self.discover.setChecked(bool(prefs.get("auto_discover", True)))
 
         self.limit = QSpinBox()
         self.limit.setRange(0, 12)
@@ -99,20 +119,40 @@ class SettingsDialog(QDialog):
             self.provider.setCurrentText(current)
 
         form.addRow(self.auto)
-        form.addRow("Max lookups per job", self.limit)
-        form.addRow("Model provider", self.provider)
-
+        form.addRow(self.discover)
+        form.addRow(i18n.t("max_lookups"), self.limit)
+        form.addRow(i18n.t("provider"), self.provider)
         layout.addLayout(form)
+
+        self.export_button = QPushButton(i18n.t("export"))
+        self.export_button.clicked.connect(self.export_kb)
+        layout.addWidget(self.export_button)
+
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def export_kb(self) -> None:
+        default = str(PROJECT_ROOT / "glossary-export.json")
+        path, _ = QFileDialog.getSaveFileName(
+            self, i18n.t("export"), default, "JSON files (*.json)"
+        )
+        if not path:
+            return
+        lex = glossary.load()
+        lex.export(Path(path))
+        QMessageBox.information(
+            self, i18n.t("app_name"),
+            i18n.t("export_done", count=len(lex.entries), path=path),
+        )
+
     def values(self) -> dict:
         return {
             "auto_research": self.auto.isChecked(),
+            "auto_discover": self.discover.isChecked(),
             "max_terms": self.limit.value(),
             "provider": self.provider.currentText(),
         }
@@ -123,27 +163,53 @@ class TrayApp(QSystemTrayIcon):
         super().__init__(app_icon())
         self.cfg = cfg
         self.worker: Worker | None = None
+        self.discover_worker: DiscoverWorker | None = None
 
         self.last_source: Path | None = None
         self.last_output: Path | None = None
         self.transcript_ready = False
         self.outputs_ready = False
-        self.panel_status = "Idle"
+        self.panel_status = ""
         self.panel: Panel | None = None
         self.review_dialog: ReviewDialog | None = None
 
-        self.setToolTip(APP_NAME)
+        prefs = settings.load()
+        i18n.set_language(prefs.get("language", "en"))
 
+        self.setToolTip(i18n.t("app_name"))
         self.menu = QMenu()
+        self.output_actions: dict[str, QAction] = {}
+        self.build_menu()
+        self.setContextMenu(self.menu)
+        self.activated.connect(self._on_activated)
+        self.panel_status = i18n.t("status_idle")
+        self._refresh()
 
-        self.action_run = QAction("Transcribe file…", self)
+    # ------------------------------------------------------------------ menu
+    def build_menu(self) -> None:
+        self.menu.clear()
+        self.output_actions = {}
+
+        self.action_run = QAction(i18n.t("transcribe"), self)
         self.action_run.triggered.connect(self.pick_file)
 
-        self.action_generate = QAction("Generate outputs (a / b / c)", self)
-        self.action_generate.triggered.connect(self.generate_outputs)
+        self.action_generators: dict[str, QAction] = {}
+        for kind, label, desc in (
+            ("a", "gen_a", "gen_a_desc"),
+            ("b", "gen_b", "gen_b_desc"),
+            ("c", "gen_c", "gen_c_desc"),
+        ):
+            action = QAction(f"{i18n.t(label)} — {i18n.t(desc)}", self)
+            action.triggered.connect(lambda _=False, k=kind: self.generate_outputs(k))
+            self.action_generators[kind] = action
 
-        self.output_menu = QMenu("Open outputs", self.menu)
-        self.output_actions: dict[str, QAction] = {}
+        self.action_panel = QAction(i18n.t("panel"), self)
+        self.action_panel.triggered.connect(self.open_panel)
+
+        self.action_review = QAction(i18n.t("review", n=0), self)
+        self.action_review.triggered.connect(self.open_review)
+
+        self.output_menu = QMenu(i18n.t("open_output"), self.menu)
         for key, label in (
             ("original", "Transcript · original"),
             ("translated", "Transcript · translation"),
@@ -157,32 +223,28 @@ class TrayApp(QSystemTrayIcon):
             self.output_actions[key] = action
             self.output_menu.addAction(action)
 
-        self.action_output_dir = QAction("Open output folder", self)
+        self.action_output_dir = QAction(i18n.t("open_output"), self)
         self.action_output_dir.triggered.connect(lambda: self._open(self.cfg.output))
 
-        self.action_config = QAction("Open config folder", self)
-        self.action_config.triggered.connect(lambda: self._open(PROJECT_ROOT / "configs"))
-
-        self.action_panel = QAction("Open panel", self)
-        self.action_panel.triggered.connect(self.open_panel)
-
-        self.action_review = QAction("Review pending terms…", self)
-        self.action_review.triggered.connect(self.open_review)
-
-        self.action_settings = QAction("Settings…", self)
+        self.action_settings = QAction(i18n.t("settings"), self)
         self.action_settings.triggered.connect(self.show_settings)
 
-        self.action_about = QAction(f"About {APP_NAME} {__version__}", self)
+        self.action_language = QAction(i18n.t("language"), self)
+        self.action_language.triggered.connect(self.toggle_language)
+
+        self.action_about = QAction(f"{i18n.t('about')} — {__version__}", self)
         self.action_about.triggered.connect(self.show_about)
 
-        self.action_status = QAction("Idle", self)
+        self.action_status = QAction(i18n.t("status_idle"), self)
         self.action_status.setEnabled(False)
 
-        self.action_quit = QAction("Quit", self)
+        self.action_quit = QAction(i18n.t("quit"), self)
         self.action_quit.triggered.connect(self.quit)
 
         self.menu.addAction(self.action_run)
-        self.menu.addAction(self.action_generate)
+        self.menu.addSeparator()
+        for kind in ("a", "b", "c"):
+            self.menu.addAction(self.action_generators[kind])
         self.menu.addSeparator()
         self.menu.addAction(self.action_status)
         self.menu.addSeparator()
@@ -190,28 +252,39 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addAction(self.action_review)
         self.menu.addMenu(self.output_menu)
         self.menu.addAction(self.action_output_dir)
-        self.menu.addAction(self.action_config)
+        self.menu.addSeparator()
         self.menu.addAction(self.action_settings)
+        self.menu.addAction(self.action_language)
         self.menu.addAction(self.action_about)
         self.menu.addSeparator()
         self.menu.addAction(self.action_quit)
 
+    def retranslate(self) -> None:
+        self.build_menu()
         self.setContextMenu(self.menu)
-        self.activated.connect(self._on_activated)
+        if self.panel is not None:
+            self.panel.retranslate()
         self._refresh()
+
+    def toggle_language(self) -> None:
+        target = "zh" if i18n.language() == "en" else "en"
+        settings.save({"language": target})
+        i18n.set_language(target)
+        self.retranslate()
 
     # ------------------------------------------------------------------ state
     def _refresh(self) -> None:
         busy = bool(self.worker and self.worker.isRunning())
         self.action_run.setEnabled(not busy)
-        self.action_generate.setEnabled(not busy and self.transcript_ready)
+        for action in self.action_generators.values():
+            action.setEnabled(not busy and self.transcript_ready)
         for key, action in self.output_actions.items():
             action.setEnabled(self._output_path(key) is not None)
         try:
             pending = len(glossary.load().pending)
         except Exception:
             pending = 0
-        self.action_review.setText(f"Review pending terms ({pending})…")
+        self.action_review.setText(i18n.t("review", n=pending))
         self.action_review.setEnabled(pending > 0)
         if self.panel is not None:
             self.panel.refresh()
@@ -224,7 +297,6 @@ class TrayApp(QSystemTrayIcon):
             names = {"a": "a-script.md", "b": "b-report.md", "c": "c-brief.md"}
             path = out / names[kind]
             return path if path.exists() else None
-
         text_dir = out / "text"
         if not text_dir.exists():
             return None
@@ -243,108 +315,89 @@ class TrayApp(QSystemTrayIcon):
         elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.open_panel()
 
+    # ------------------------------------------------------------------ actions
     def open_panel(self) -> None:
         if self.panel is None:
             self.panel = Panel(self)
-        self.panel.refresh()
+        self.panel.retranslate()
         self.panel.show()
         self.panel.raise_()
         self.panel.activateWindow()
 
     def open_review(self) -> None:
-        if self.review_dialog is None:
-            self.review_dialog = ReviewDialog(self.cfg)
+        self.review_dialog = ReviewDialog(self.cfg, self)
         self.review_dialog.exec()
         self.review_dialog = None
         self._refresh()
 
-    def check_pending(self) -> None:
-        try:
-            count = len(glossary.load().pending)
-        except Exception:
-            count = 0
-        self._refresh()
-        if count:
-            self.showMessage(
-                APP_NAME,
-                f"{count} term(s) need review.\nRight-click the tray icon → "
-                "Review pending terms.",
-                QSystemTrayIcon.MessageIcon.Information,
-                9000,
-            )
-
-    # ------------------------------------------------------------------ actions
     def pick_file(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(None, "Choose a file", "", AUDIO_FILTER)
+        path, _ = QFileDialog.getOpenFileName(None, i18n.t("transcribe"), "", AUDIO_FILTER)
         if path:
             self.start_job(Path(path), TRANSCRIBE_STAGES, "transcribe")
 
-    def start_job(self, source: Path, stages: tuple[str, ...], stage: str) -> None:
+    def start_job(self, source: Path, stages: tuple[str, ...], stage: str,
+                  outputs: tuple[str, ...] = ("a", "b", "c")) -> None:
         if self.worker and self.worker.isRunning():
-            self.showMessage(APP_NAME, "A job is already running.",
+            self.showMessage(i18n.t("app_name"), i18n.t("working_alert"),
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
 
         self.last_source = source
-        self.panel_status = f"Working: {source.name}"
+        self.panel_status = i18n.t("status_working", name=source.name)
         self.action_status.setText(self.panel_status)
-        self.setToolTip(f"{APP_NAME} — working on {source.name}")
-        self.showMessage(APP_NAME, f"Started: {source.name}",
+        self.showMessage(i18n.t("app_name"), i18n.t("started", name=source.name),
                          QSystemTrayIcon.MessageIcon.Information, 3000)
 
-        self.worker = Worker(source, self.cfg, stages, stage)
+        self.worker = Worker(source, self.cfg, stages, stage, outputs)
         self.worker.done.connect(self.on_done)
         self.worker.failed.connect(self.on_error)
         self.worker.start()
         self._refresh()
 
-    def on_done(self, output: str, stage: str) -> None:
+    def on_done(self, output: str, stage: str, kinds: str) -> None:
         self.last_output = Path(output)
         if stage == "transcribe":
             self.transcript_ready = True
-            self.panel_status = "Transcript ready"
-            self.action_status.setText("Transcript ready")
-            self.showMessage(
-                APP_NAME,
-                "Transcript ready.\nOpen the transcript to review it, then run "
-                "\"Generate outputs (a / b / c)\".",
-                QSystemTrayIcon.MessageIcon.Information, 8000,
-            )
+            self.panel_status = i18n.t("status_transcript")
+            self.action_status.setText(self.panel_status)
+            self.showMessage(i18n.t("app_name"), i18n.t("transcript_ready_msg"),
+                             QSystemTrayIcon.MessageIcon.Information, 8000)
         else:
             self.outputs_ready = True
-            self.panel_status = "Outputs ready"
-            self.action_status.setText("Outputs ready")
-            self.showMessage(
-                APP_NAME,
-                "Outputs ready: spoken script, knowledge report and brief.",
-                QSystemTrayIcon.MessageIcon.Information, 8000,
-            )
-        self.setToolTip(APP_NAME)
+            labels = {"a": "gen_a", "b": "gen_b", "c": "gen_c"}
+            kind_label = i18n.t(labels.get(kinds.split(",")[0], "gen_a"))
+            self.panel_status = i18n.t("status_outputs")
+            self.action_status.setText(self.panel_status)
+            self.showMessage(i18n.t("app_name"),
+                             i18n.t("outputs_ready", kind=kind_label),
+                             QSystemTrayIcon.MessageIcon.Information, 8000)
+        self.setToolTip(i18n.t("app_name"))
         self._refresh()
 
     def on_error(self, message: str) -> None:
-        self.panel_status = "Failed"
-        self.action_status.setText("Failed")
-        self.setToolTip(APP_NAME)
-        self.showMessage(APP_NAME, f"Job failed:\n{message[:300]}",
+        self.panel_status = i18n.t("status_failed")
+        self.action_status.setText(self.panel_status)
+        self.showMessage(i18n.t("app_name"),
+                         i18n.t("failed_msg", message=message[:300]),
                          QSystemTrayIcon.MessageIcon.Critical, 8000)
         self._refresh()
 
-    def generate_outputs(self) -> None:
+    def generate_outputs(self, kind: str = "a") -> None:
         if not self.last_source or not self.transcript_ready:
-            self.showMessage(APP_NAME, "Transcribe a file first.",
+            self.showMessage(i18n.t("app_name"), i18n.t("gen_hint"),
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
-        self.start_job(self.last_source, GENERATE_STAGES, "generate")
+        self.start_job(self.last_source, GENERATE_STAGES, "generate", (kind,))
 
     def open_output(self, kind: str) -> None:
         path = self._output_path(kind)
         if path is None:
-            self.showMessage(APP_NAME, "That output is not available yet.",
+            self.showMessage(i18n.t("app_name"), i18n.t("gen_hint"),
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
         self._open(path)
 
+    # ------------------------------------------------------------------ misc
     def show_settings(self) -> None:
         dialog = SettingsDialog(self.cfg)
         if not dialog.exec():
@@ -353,26 +406,13 @@ class TrayApp(QSystemTrayIcon):
         self.cfg.research["enabled"] = prefs["auto_research"]
         self.cfg.research["max_terms"] = prefs["max_terms"]
         self.cfg.llm["order"] = [prefs["provider"]]
-        self.showMessage(
-            APP_NAME,
-            "Settings saved. They apply to the next job.",
-            QSystemTrayIcon.MessageIcon.Information,
-            4000,
-        )
+        self.showMessage(i18n.t("app_name"), i18n.t("settings_saved"),
+                         QSystemTrayIcon.MessageIcon.Information, 4000)
 
     def show_about(self) -> None:
         QMessageBox.information(
-            None,
-            f"About {APP_NAME}",
-            f"{APP_NAME} {__version__}\n\n"
-            "Turns multilingual speech into clean transcripts,\n"
-            "knowledge reports and short briefs.\n\n"
-            "Workflow:\n"
-            "1. Transcribe file…\n"
-            "2. Review the bilingual transcript\n"
-            "3. Generate outputs (a / b / c)\n\n"
-            "All processing stays on this machine unless a cloud\n"
-            "provider is enabled in configs/models.toml.",
+            None, i18n.t("about"),
+            i18n.t("about_text", name=i18n.t("app_name"), version=__version__),
         )
 
     def _open(self, path: Path) -> None:
@@ -383,6 +423,24 @@ class TrayApp(QSystemTrayIcon):
         else:
             subprocess.Popen(["xdg-open", str(path)])
 
+    def check_pending(self) -> None:
+        lex = glossary.load()
+        lex.prune_pending()
+        self._refresh()
+        count = len(lex.pending)
+        if count:
+            self.showMessage(i18n.t("app_name"), i18n.t("review", n=count),
+                             QSystemTrayIcon.MessageIcon.Information, 9000)
+
+    def run_discovery(self) -> None:
+        if self.worker and self.worker.isRunning():
+            return
+        if self.discover_worker and self.discover_worker.isRunning():
+            return
+        self.discover_worker = DiscoverWorker(self.cfg)
+        self.discover_worker.finished_ok.connect(lambda _: self._refresh())
+        self.discover_worker.start()
+
     def quit(self) -> None:
         if self.worker and self.worker.isRunning():
             self.worker.terminate()
@@ -392,7 +450,7 @@ class TrayApp(QSystemTrayIcon):
 def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
              show_review: bool = False) -> int:
     app = QApplication.instance() or QApplication(sys.argv)
-    app.setApplicationName(APP_NAME)
+    app.setApplicationName(i18n.t("app_name"))
     app.setQuitOnLastWindowClosed(False)
 
     selftest = bool(os.environ.get("MVS_TRAY_SELFTEST"))
@@ -408,27 +466,21 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
     if show_review:
         QTimer.singleShot(600, tray.open_review)
 
-    # Daily review reminder: check at startup and then once a day.
-    QTimer.singleShot(3000, tray.check_pending)
+    QTimer.singleShot(4000, tray.check_pending)
     daily = QTimer(tray)
     daily.setInterval(24 * 60 * 60 * 1000)
     daily.timeout.connect(tray.check_pending)
     daily.start()
 
+    prefs = settings.load()
+    if prefs.get("auto_discover", True):
+        QTimer.singleShot(15000, tray.run_discovery)
+
     QTimer.singleShot(
         1200,
-        lambda: tray.showMessage(
-            APP_NAME,
-            "Running in the system tray.\n"
-            "Right-click the blue icon for options.\n"
-            "If you cannot see it, open the ^ overflow near the clock.",
-            QSystemTrayIcon.MessageIcon.Information,
-            9000,
-        ),
+        lambda: tray.showMessage(i18n.t("app_name"), i18n.t("tray_hint"),
+                                 QSystemTrayIcon.MessageIcon.Information, 9000),
     )
-
-    if initial is not None:
-        QTimer.singleShot(200, lambda: tray.start_job(initial, TRANSCRIBE_STAGES, "transcribe"))
 
     if selftest:
         QTimer.singleShot(1500, app.quit)

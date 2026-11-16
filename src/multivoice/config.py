@@ -22,6 +22,7 @@ class Config:
     llm: dict = field(default_factory=dict)
     vad: dict = field(default_factory=dict)
     verify: dict = field(default_factory=dict)
+    research: dict = field(default_factory=dict)
     languages: list = field(default_factory=lambda: ["zh", "en"])
 
 
@@ -64,6 +65,7 @@ def load(config_dir: str | Path | None = None) -> Config:
         llm=models.get("llm", {}),
         vad=models.get("vad", {}),
         verify=models.get("verify", {}),
+        research=models.get("research", {}),
         languages=list(paths.get("output", {}).get("languages", ["zh", "en"])),
     )
 

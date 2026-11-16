@@ -45,6 +45,55 @@ def probe_file(source: Path, cfg: config.Config) -> int:
     return 0
 
 
+def glossary_command(args, cfg: config.Config) -> int:
+    from . import glossary, research
+
+    lex = glossary.load()
+    command = args.glossary_command
+
+    if command == "list":
+        if not lex.entries:
+            print("(empty)")
+            return 0
+        for entry in lex.entries:
+            flag = "STALE" if lex.is_stale(entry) else "ok"
+            print(f"[{flag}] {entry['term']:<18} {entry.get('kind', ''):<10} "
+                  f"{entry.get('topic', ''):<10} {entry.get('last_verified', '')}")
+            print(f"        {entry.get('definition', '')}")
+        return 0
+
+    if command == "stale":
+        stale = [e for e in lex.entries if lex.is_stale(e)]
+        for entry in stale:
+            print(f"{entry['term']}  (verified {entry.get('last_verified', '?')})")
+        if not stale:
+            print("(nothing stale)")
+        return 0
+
+    if command == "add":
+        entry = lex.add(
+            args.term,
+            aliases=args.alias,
+            definition=args.definition,
+            en=args.en,
+            kind=args.kind,
+            topic=args.topic,
+        )
+        print(f"saved: {entry['term']} kind={entry['kind']} ttl={entry['ttl_days']}")
+        return 0
+
+    if command == "research":
+        entry = research.research_term(args.term, lex, cfg)
+        if entry is None:
+            print("no reliable result; entry not saved")
+            return 1
+        print(f"saved: {entry['term']} kind={entry['kind']} ttl={entry['ttl_days']}")
+        print(entry.get("definition", ""))
+        return 0
+
+    return 0
+
+
 def doctor(cfg: config.Config) -> int:
     failures = 0
 
@@ -106,6 +155,20 @@ def main(argv: list[str] | None = None) -> int:
     tray_parser = sub.add_parser("tray", help="start the system tray app")
     tray_parser.add_argument("--input", default=None, help="start a job immediately")
 
+    gloss = sub.add_parser("glossary", help="manage the slang/term lexicon")
+    gloss_sub = gloss.add_subparsers(dest="glossary_command", required=True)
+    gloss_sub.add_parser("list", help="show every entry")
+    gloss_sub.add_parser("stale", help="show entries that need re-checking")
+    add_parser = gloss_sub.add_parser("add", help="add or update an entry")
+    add_parser.add_argument("--term", required=True)
+    add_parser.add_argument("--alias", action="append", default=[])
+    add_parser.add_argument("--definition", default="")
+    add_parser.add_argument("--en", default="")
+    add_parser.add_argument("--kind", default="other")
+    add_parser.add_argument("--topic", default="")
+    research_parser = gloss_sub.add_parser("research", help="look a term up on the web")
+    research_parser.add_argument("--term", required=True)
+
     run_parser = sub.add_parser("run", help="process one file or URL")
     run_parser.add_argument("--input", required=True)
     run_parser.add_argument("--lang", default="auto")
@@ -131,6 +194,9 @@ def main(argv: list[str] | None = None) -> int:
 
         initial = Path(args.input) if args.input else None
         return run_tray(cfg, initial)
+
+    if args.command == "glossary":
+        return glossary_command(args, cfg)
 
     stages = tuple(s.strip() for s in args.stages.split(",") if s.strip())
     out = pipeline.run(

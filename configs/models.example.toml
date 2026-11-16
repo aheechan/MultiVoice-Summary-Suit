@@ -58,3 +58,8 @@ enabled = false
 enabled = true
 wiki_lang = ["zh", "en"]
 max_terms = 8
+
+[research]
+# 遇到词库没有或已过期的词，现场联网核实（每次任务有上限）
+enabled = true
+max_terms = 6

@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from . import (asr, bgm, classify, correct, generate, ingest, normalize,
-               structure, translate, vad, verify)
+from . import (asr, bgm, classify, correct, generate, glossary, ingest,
+               normalize, research, structure, translate, vad, verify)
 from .asr import Segment
 from .config import Config
 
@@ -94,6 +94,7 @@ def run(
 
     job = _job_dir(cfg, source)
     out = cfg.output / job.name
+    lex = glossary.load()
 
     audio = job / "audio.wav"
     if not (resume and audio.exists()):
@@ -126,25 +127,55 @@ def run(
 
     context: dict = {"domain": "other", "label": "其他", "terms": []}
     evidence = ""
+    glossary_text = "（无）"
+    alias_changes: list = []
+    researched: list = []
     already_corrected = bool(resume and fixed_json.exists())
     if "correct" in stages and not already_corrected:
         if resume and (job / "context.json").exists():
             saved = json.loads((job / "context.json").read_text(encoding="utf-8"))
             context = saved.get("classify", context)
             evidence = saved.get("evidence", "")
+            glossary_text = saved.get("glossary", glossary_text)
+            alias_changes = saved.get("aliases", [])
+            researched = saved.get("researched", [])
         else:
+            # 1) deterministic alias repair from the local lexicon
+            for segment in segments:
+                fixed, changes = lex.apply(segment.text)
+                if changes:
+                    segment.text = fixed
+                    alias_changes.extend(changes)
+
             head = "\n".join(seg.text for seg in segments)[:3000]
+
+            # 2) classify the content, then research unknown or stale terms on the fly
             context = classify.classify(head, cfg)
+            candidates = list(context["terms"])
+            candidates += [entry["term"] for entry in lex.match(head)]
+            researched = research.ensure_terms(candidates, lex, cfg)
+            glossary_text, _ = lex.context_for(head)
+
+            # 3) encyclopedia facts for hard entities
             evidence, items = verify.build_evidence(context["terms"], cfg)
             findings = verify.suggest(items, evidence)
-            _write(job / "context.json", json.dumps(
-                {"classify": context, "evidence": evidence, "findings": findings},
-                ensure_ascii=False, indent=2))
+
+            _write(job / "context.json", json.dumps({
+                "classify": context,
+                "evidence": evidence,
+                "findings": findings,
+                "glossary": glossary_text,
+                "aliases": alias_changes,
+                "researched": [e["term"] for e in researched],
+            }, ensure_ascii=False, indent=2))
             if findings:
                 _write(out / "verification.md", verify.to_markdown(findings))
 
         segments = correct.correct_segments(
-            segments, cfg, domain=context.get("label", ""), evidence=evidence
+            segments, cfg,
+            domain=context.get("label", ""),
+            evidence=evidence,
+            glossary_text=glossary_text,
         )
         _write(fixed_json, json.dumps([s.to_dict() for s in segments],
                                       ensure_ascii=False, indent=2))
@@ -187,6 +218,8 @@ def run(
         "segments": len(segments),
         "units": len(units),
         "bgm": background,
+        "aliases_repaired": [f"{a}->{b}" for a, b in alias_changes],
+        "terms_researched": [e["term"] for e in researched],
         "updated": datetime.now().isoformat(timespec="seconds"),
     }
     _write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))

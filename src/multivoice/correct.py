@@ -41,10 +41,11 @@ def correct_segments(
     *,
     domain: str = "",
     evidence: str = "",
+    glossary_text: str | None = None,
 ) -> list[Segment]:
     """Correct ASR errors paragraph by paragraph. Never rewrites content."""
     template = PROMPT.read_text(encoding="utf-8")
-    glossary = load_glossary()
+    glossary = glossary_text if glossary_text is not None else load_glossary()
 
     corrected: list[Segment] = []
     for group in _chunks(segments):

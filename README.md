@@ -52,6 +52,32 @@ python -m multivoice tray
 
 产物默认写到 `D:\Local Repositories\MultiVoice-Summary-Suit\output\<job-id>\`。
 
+## 梗词库与时效
+
+网络梗、人物绰号、产品名变化很快，所以词库按**时效类型**管理：
+
+| kind | 例子 | 有效期 |
+|---|---|---|
+| `evergreen` | 梁文锋、机构名、地名 | 10 年 |
+| `product` | V4Flash、V4Pro、DeepSeek Harness | 120 天 |
+| `current` | 斩杀线（当下网络热词） | 30 天 |
+| `event` | 具体新闻事件 | 90 天 |
+
+每个词条记录 `last_verified`、`sources`、`confidence`。识别前会：
+
+1. **别名修复**：把已知的听错写法直接替换成正确词（`梁盛 → 梁圣`、`转差线 → 斩杀线`）
+2. **按主题注入**：命中任一 DeepSeek 词条，就把整个 deepseek 主题包（人物、产品、梗）一起放进纠错提示
+3. **现场检索**：遇到词库没有、或已过期的词，立刻搜 Bing + 让模型判断 `kind` 与有效期再入库；只收标题能对上的词，避免伪词条污染
+
+```powershell
+mvs glossary list
+mvs glossary stale
+mvs glossary add --term 梁圣 --alias 梁盛 --kind evergreen --topic deepseek --definition "..."
+mvs glossary research --term 新梗
+```
+
+词库位置：`D:\Local Repositories\MultiVoice-Summary-Suit\glossary\terms.jsonl`（不在仓库内）。
+
 ## 托盘界面
 
 <p align="center"><img src="assets/icon.png" width="120" alt="MultiVoice Summary Suit"></p>

@@ -96,6 +96,24 @@ class DiscoverWorker(QThread):
             self.finished_ok.emit(0)
 
 
+class PrefetchWorker(QThread):
+    finished_ok = Signal(int)
+
+    def __init__(self, cfg: Config, limit: int):
+        super().__init__()
+        self.cfg = cfg
+        self.limit = limit
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            from .. import prefetch
+
+            lex = glossary.load()
+            self.finished_ok.emit(prefetch.warm(lex, self.cfg, self.limit))
+        except Exception:
+            self.finished_ok.emit(0)
+
+
 class UrlWorker(QThread):
     ready = Signal(str)
     failed = Signal(str)
@@ -187,6 +205,7 @@ class TrayApp(QSystemTrayIcon):
         self.worker: Worker | None = None
         self.discover_worker: DiscoverWorker | None = None
         self.url_worker: UrlWorker | None = None
+        self.prefetch_worker: PrefetchWorker | None = None
 
         self.last_source: Path | None = None
         self.last_output: Path | None = None
@@ -354,6 +373,7 @@ class TrayApp(QSystemTrayIcon):
     def open_review(self) -> None:
         try:
             self.review_dialog = ReviewDialog(self.cfg, self.panel)
+            self.warm_review(3)
             self.review_dialog.exec()
             self.review_dialog = None
             self._refresh()
@@ -514,6 +534,14 @@ class TrayApp(QSystemTrayIcon):
         self.discover_worker.finished_ok.connect(lambda _: self._refresh())
         self.discover_worker.start()
 
+    def warm_review(self, limit: int) -> None:
+        """Preload bilingual search summaries so the review dialog opens instantly."""
+        if self.prefetch_worker and self.prefetch_worker.isRunning():
+            return
+        self.prefetch_worker = PrefetchWorker(self.cfg, limit)
+        self.prefetch_worker.finished_ok.connect(lambda _: self._refresh())
+        self.prefetch_worker.start()
+
     def quit(self) -> None:
         if self.worker and self.worker.isRunning():
             self.worker.terminate()
@@ -548,6 +576,8 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
     prefs = settings.load()
     if prefs.get("auto_discover", True):
         QTimer.singleShot(15000, tray.run_discovery)
+
+    QTimer.singleShot(8000, lambda: tray.warm_review(6))
 
     QTimer.singleShot(
         1200,

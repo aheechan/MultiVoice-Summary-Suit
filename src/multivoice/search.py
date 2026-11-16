@@ -17,14 +17,19 @@ RESULT = re.compile(
 )
 
 
-def bing(query: str, limit: int = 5) -> list[dict] | None:
+def bing(query: str, limit: int = 5, lang: str | None = None) -> list[dict] | None:
     """Scrape Bing's HTML results.
 
     Returns None when the request itself failed (network, rate limit), and an
     empty list when the request succeeded but matched nothing. Callers must not
     treat a failed request as "this term does not exist".
     """
-    url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": query})
+    params = {"q": query}
+    if lang == "zh":
+        params["mkt"] = "zh-CN"
+    elif lang == "en":
+        params["mkt"] = "en-US"
+    url = "https://www.bing.com/search?" + urllib.parse.urlencode(params)
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=15) as resp:

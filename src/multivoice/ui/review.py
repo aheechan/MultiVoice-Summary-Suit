@@ -1,7 +1,7 @@
 """Review dialog for terms that could not be confirmed automatically."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import glossary, research, search
+from .. import glossary, prefetch, research
 from ..config import PROJECT_ROOT
 from . import i18n
 
@@ -87,8 +87,9 @@ class ReviewDialog(QDialog):
         super().__init__(parent)
         self.cfg = cfg
         self.lex = glossary.load()
-        self._searched = False
-        self._hints: dict[str, list[str]] = {}
+        self._mtime_seen = 0.0
+        self._hints: dict[str, str] = {}
+        self._cache_mtime_seen = self._cache_mtime()
 
         self.setWindowTitle(i18n.t("review_title"))
         self.setWindowIcon(QIcon(str(ASSETS / "icon.png")))
@@ -117,7 +118,13 @@ class ReviewDialog(QDialog):
         self.btn_research.clicked.connect(self.research_selected)
         self.btn_drop.clicked.connect(self.drop_selected)
 
+        self._timer = QTimer(self)
+        self._timer.setInterval(1200)
+        self._timer.timeout.connect(self._maybe_refresh)
+        self._timer.start()
+
     def reload(self) -> None:
+        selected = set(self.selected_terms())
         self.list.clear()
         if not self.lex.pending:
             item = QListWidgetItem(i18n.t("nothing_pending"))
@@ -125,42 +132,53 @@ class ReviewDialog(QDialog):
             self.list.addItem(item)
             return
 
-        if not self._searched:
-            import time
-
-            kept = []
-            for entry in self.lex.pending:
-                hits = search.bing(entry["term"], limit=3)
-                if hits is None:
-                    # Network problem: keep the term, we learned nothing.
-                    kept.append(entry)
-                    continue
-                if not hits:
-                    # Request succeeded and found nothing: treat as mis-transcription.
-                    continue
-                self._hints[entry["term"]] = [h["title"] for h in hits[:2]]
-                kept.append(entry)
-                time.sleep(0.4)
-            if len(kept) != len(self.lex.pending):
-                self.lex.pending = kept
-                self.lex.save()
-            self._searched = True
-
+        language = i18n.language()
+        dropped: list[str] = []
         for entry in self.lex.pending:
-            hints = self._hints.get(entry["term"], [])
-            text = f"{entry['term']}   x{entry.get('count', 1)}   {entry.get('reason', '')}"
-            if hints:
-                text += "\n    " + "  |  ".join(hints)
+            term = entry["term"]
+            record = prefetch.cached(term)
+            if record is None:
+                text = f"{term}   x{entry.get('count', 1)}   …"
+            elif record.get("empty"):
+                dropped.append(term)
+                continue
+            else:
+                summary = record.get("summary_zh" if language == "zh" else "summary_en") or ""
+                titles = record.get("zh" if language == "zh" else "en") or []
+                self._hints[term] = summary or " / ".join(titles[:2])
+                text = f"{term}   x{entry.get('count', 1)}"
+                if summary:
+                    text += f"\n    {summary[:120]}"
+                if titles:
+                    text += "\n    · " + "  |  ".join(titles[:2])
             item = QListWidgetItem(text)
-            item.setData(1, entry["term"])
+            item.setData(1, term)
             self.list.addItem(item)
+            if term in selected:
+                item.setSelected(True)
+
+        if dropped:
+            self.lex.pending = [p for p in self.lex.pending if p["term"] not in dropped]
+            self.lex.save()
+
+    def _cache_mtime(self) -> float:
+        try:
+            return prefetch.CACHE_PATH.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    def _maybe_refresh(self) -> None:
+        current = self._cache_mtime()
+        if current != self._cache_mtime_seen:
+            self._cache_mtime_seen = current
+            self.reload()
 
     def selected_terms(self) -> list[str]:
         return [i.data(1) for i in self.list.selectedItems() if i.data(1)]
 
     def add_selected(self) -> None:
         for term in self.selected_terms():
-            hint = " / ".join(self._hints.get(term, []))
+            hint = self._hints.get(term, "")
             dialog = TermEditDialog(term, hint, list(self.lex.topics), self)
             if not dialog.exec():
                 continue

@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QFileDialog,
     QFormLayout,
+    QInputDialog,
+    QLineEdit,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -24,7 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import __version__, discover, glossary, pipeline, settings
+from .. import __version__, discover, glossary, ingest, pipeline, settings
 from ..config import PROJECT_ROOT, Config
 from . import i18n
 from .panel import Panel
@@ -80,7 +82,6 @@ class Worker(QThread):
 
 class DiscoverWorker(QThread):
     finished_ok = Signal(int)
-
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
@@ -92,6 +93,23 @@ class DiscoverWorker(QThread):
             self.finished_ok.emit(int(result.get("queued", 0)))
         except Exception:
             self.finished_ok.emit(0)
+
+
+class UrlWorker(QThread):
+    ready = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, url: str, cfg: Config):
+        super().__init__()
+        self.url = url
+        self.cfg = cfg
+
+    def run(self) -> None:  # noqa: D401
+        try:
+            target = ingest.fetch_url(self.url, self.cfg.work / "_downloads")
+            self.ready.emit(str(target))
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class SettingsDialog(QDialog):
@@ -121,10 +139,19 @@ class SettingsDialog(QDialog):
         if current in names:
             self.provider.setCurrentText(current)
 
+        self.model = QLineEdit()
+        self.model.setText(prefs.get("model") or self._current_model(cfg, self.provider.currentText()))
+        self.provider.currentTextChanged.connect(
+            lambda name: self.model.setText(
+                prefs.get("model") or self._current_model(cfg, name)
+            )
+        )
+
         form.addRow(self.auto)
         form.addRow(self.discover)
         form.addRow(i18n.t("max_lookups"), self.limit)
         form.addRow(i18n.t("provider"), self.provider)
+        form.addRow(i18n.t("model"), self.model)
         layout.addLayout(form)
 
         self.export_button = QPushButton(i18n.t("export"))
@@ -137,6 +164,13 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    @staticmethod
+    def _current_model(cfg: Config, provider_name: str) -> str:
+        for item in cfg.llm.get("providers", []):
+            if item.get("name") == provider_name:
+                return item.get("model", "")
+        return ""
 
     def export_kb(self) -> None:
         default = str(PROJECT_ROOT / "glossary-export.json")
@@ -158,15 +192,19 @@ class SettingsDialog(QDialog):
             "auto_discover": self.discover.isChecked(),
             "max_terms": self.limit.value(),
             "provider": self.provider.currentText(),
+            "model": self.model.text().strip(),
         }
 
 
 class TrayApp(QSystemTrayIcon):
+    TRANSCRIBE_STAGES = TRANSCRIBE_STAGES
+
     def __init__(self, cfg: Config):
         super().__init__(app_icon())
         self.cfg = cfg
         self.worker: Worker | None = None
         self.discover_worker: DiscoverWorker | None = None
+        self.url_worker: UrlWorker | None = None
 
         self.last_source: Path | None = None
         self.last_output: Path | None = None
@@ -195,6 +233,9 @@ class TrayApp(QSystemTrayIcon):
 
         self.action_run = QAction(i18n.t("transcribe"), self)
         self.action_run.triggered.connect(self.pick_file)
+
+        self.action_url = QAction(i18n.t("from_url"), self)
+        self.action_url.triggered.connect(self.pick_url)
 
         self.action_generators: dict[str, QAction] = {}
         for kind, label, desc in (
@@ -245,6 +286,7 @@ class TrayApp(QSystemTrayIcon):
         self.action_quit.triggered.connect(self.quit)
 
         self.menu.addAction(self.action_run)
+        self.menu.addAction(self.action_url)
         self.menu.addSeparator()
         for kind in ("a", "b", "c"):
             self.menu.addAction(self.action_generators[kind])
@@ -346,6 +388,29 @@ class TrayApp(QSystemTrayIcon):
         if path:
             self.start_job(Path(path), TRANSCRIBE_STAGES, "transcribe")
 
+    def pick_url(self) -> None:
+        url, ok = QInputDialog.getText(
+            None, i18n.t("from_url"), i18n.t("url_prompt")
+        )
+        if ok and url.strip():
+            self.start_url(url.strip())
+
+    def start_url(self, url: str) -> None:
+        if self.url_worker and self.url_worker.isRunning():
+            return
+        self.panel_status = i18n.t("downloading")
+        if self.panel is not None:
+            self.panel.set_progress(2, i18n.t("downloading"))
+        self.showMessage(i18n.t("app_name"), i18n.t("url_hint"),
+                         QSystemTrayIcon.MessageIcon.Information, 5000)
+
+        self.url_worker = UrlWorker(url, self.cfg)
+        self.url_worker.ready.connect(
+            lambda path: self.start_job(Path(path), TRANSCRIBE_STAGES, "transcribe")
+        )
+        self.url_worker.failed.connect(self.on_error)
+        self.url_worker.start()
+
     def start_job(self, source: Path, stages: tuple[str, ...], stage: str,
                   outputs: tuple[str, ...] = ("a", "b", "c")) -> None:
         if self.worker and self.worker.isRunning():
@@ -431,6 +496,11 @@ class TrayApp(QSystemTrayIcon):
         self.cfg.research["enabled"] = prefs["auto_research"]
         self.cfg.research["max_terms"] = prefs["max_terms"]
         self.cfg.llm["order"] = [prefs["provider"]]
+        model = prefs.get("model")
+        if model:
+            for item in self.cfg.llm.get("providers", []):
+                if item.get("name") == prefs["provider"]:
+                    item["model"] = model
         self.showMessage(i18n.t("app_name"), i18n.t("settings_saved"),
                          QSystemTrayIcon.MessageIcon.Information, 4000)
 

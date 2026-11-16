@@ -1,6 +1,8 @@
 """Main control panel (works even when the tray icon is hidden)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
@@ -18,6 +20,9 @@ from ..config import PROJECT_ROOT
 from . import i18n
 
 ASSETS = PROJECT_ROOT / "assets"
+MEDIA_SUFFIXES = {
+    ".mp4", ".mkv", ".mov", ".webm", ".mp3", ".wav", ".m4a", ".flac", ".aac",
+}
 
 STYLE = """
 QWidget { background: #04060d; color: #dceeff; font-family: 'Segoe UI', sans-serif; }
@@ -25,7 +30,8 @@ QFrame#card { background: #070b16; border: 1px solid #16243f; border-radius: 14p
 QLabel#title { font-size: 18px; font-weight: 600; color: #eaf7ff; }
 QLabel#subtitle { color: #7f93ad; font-size: 12px; }
 QLabel#status { color: #9fd8ff; font-size: 12px; }
-QLabel#section { color: #6f86a6; font-size: 11px; letter-spacing: 1px; }
+QLabel#info { color: #6f86a6; font-size: 11px; }
+QLabel#step { color: #7f93ad; font-size: 11px; }
 QPushButton {
     background: #10203c; color: #dceeff; border: 1px solid #1f3b6b;
     border-radius: 8px; padding: 10px 14px; text-align: left;
@@ -34,6 +40,10 @@ QPushButton:hover { background: #16305a; border-color: #3d7bff; }
 QPushButton:disabled { color: #4a5a70; border-color: #16243f; background: #080d18; }
 QPushButton#primary { background: #1d4ed8; border-color: #3d7bff; font-weight: 600; }
 QPushButton#primary:hover { background: #2563eb; }
+QPushButton#url {
+    background: #0d1b33; border: 1px solid #24467f; font-size: 12px;
+    padding: 0px; text-align: center;
+}
 QPushButton#circle {
     background: #0d1b33; border: 1px solid #24467f; border-radius: 19px;
     font-size: 12px; font-weight: 600; padding: 0px; text-align: center;
@@ -49,7 +59,6 @@ QProgressBar {
     height: 8px; text-align: center; color: transparent;
 }
 QProgressBar::chunk { background: #2f6bff; border-radius: 4px; }
-QLabel#step { color: #7f93ad; font-size: 11px; }
 """
 
 
@@ -60,11 +69,12 @@ class Panel(QWidget):
         self.setWindowTitle(i18n.t("app_name"))
         self.setWindowIcon(QIcon(str(ASSETS / "icon.png")))
         self.setStyleSheet(STYLE)
-        self.setMinimumWidth(470)
+        self.setMinimumWidth(480)
+        self.setAcceptDrops(True)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(12)
+        root.setSpacing(10)
 
         card = QFrame()
         card.setObjectName("card")
@@ -104,21 +114,32 @@ class Panel(QWidget):
 
         root.addWidget(card)
 
+        self.info = QLabel()
+        self.info.setObjectName("info")
+        self.info.setWordWrap(True)
+        root.addWidget(self.info)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
         self.btn_transcribe = QPushButton()
         self.btn_transcribe.setObjectName("primary")
         self.btn_transcribe.clicked.connect(self.tray.pick_file)
-        root.addWidget(self.btn_transcribe)
 
-        self.section = QLabel()
-        self.section.setObjectName("section")
-        self.section.setWordWrap(True)
-        root.addWidget(self.section)
+        self.btn_url = QPushButton()
+        self.btn_url.setObjectName("url")
+        self.btn_url.setFixedWidth(96)
+        self.btn_url.clicked.connect(self.tray.pick_url)
+
+        row.addWidget(self.btn_transcribe, 1)
+        row.addWidget(self.btn_url)
+        root.addLayout(row)
 
         self.output_buttons = {}
         for kind in ("a", "b", "c"):
             button = QPushButton()
             button.setMinimumHeight(52)
             button.setEnabled(False)
+            button.setStyleSheet("text-align: left;")
             button.clicked.connect(lambda _=False, k=kind: self.tray.generate_outputs(k))
             self.output_buttons[kind] = button
             root.addWidget(button)
@@ -127,10 +148,9 @@ class Panel(QWidget):
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
         self.progress.setFixedHeight(8)
-        self.progress.hide()
+        self.progress.setTextVisible(False)
         self.step = QLabel()
         self.step.setObjectName("step")
-        self.step.hide()
         root.addWidget(self.progress)
         root.addWidget(self.step)
 
@@ -157,27 +177,46 @@ class Panel(QWidget):
         self.retranslate()
         self.refresh()
 
+    # ------------------------------------------------------------------ dnd
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() in MEDIA_SUFFIXES:
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            if not url.isLocalFile():
+                continue
+            path = Path(url.toLocalFile())
+            if path.suffix.lower() in MEDIA_SUFFIXES:
+                self.tray.start_job(path, self.tray.TRANSCRIBE_STAGES, "transcribe")
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    # ------------------------------------------------------------------ ui
     def retranslate(self) -> None:
         self.setWindowTitle(i18n.t("app_name"))
         self.title.setText(i18n.t("app_name"))
         self.subtitle.setText(i18n.t("subtitle"))
         self.btn_transcribe.setText(i18n.t("transcribe"))
-        self.section.setText(i18n.t("gen_hint").upper())
+        self.btn_url.setText(i18n.t("from_url"))
         for kind, label, desc in (
             ("a", "gen_a", "gen_a_desc"),
             ("b", "gen_b", "gen_b_desc"),
             ("c", "gen_c", "gen_c_desc"),
         ):
-            button = self.output_buttons[kind]
-            button.setText(f"{i18n.t(label)}\n{i18n.t(desc)}")
-            button.setStyleSheet("text-align: left;")
+            self.output_buttons[kind].setText(f"{i18n.t(label)}\n{i18n.t(desc)}")
         self.btn_outputs.setText(i18n.t("open_output"))
         self.btn_settings.setText(i18n.t("settings").rstrip("…"))
         self.btn_about.setText(i18n.t("about"))
         self.btn_lang.setText(i18n.t("language"))
-        self.btn_lang.setToolTip(i18n.t("language"))
-        self.btn_review.setToolTip(i18n.t("review", n=0))
         self.refresh()
+        if not self.progress.property("active"):
+            self.set_idle()
 
     def refresh(self) -> None:
         self.status.setText(getattr(self.tray, "panel_status", i18n.t("status_idle")))
@@ -191,18 +230,20 @@ class Panel(QWidget):
         self.btn_review.setText(str(count))
         self.btn_review.setEnabled(count > 0)
         self.btn_review.setToolTip(i18n.t("review", n=count))
+        self.info.setText(i18n.t("review_info", n=count) if count else "")
 
     def set_progress(self, value: int, message: str) -> None:
-        self.progress.show()
-        self.step.show()
+        self.progress.setProperty("active", True)
         self.progress.setValue(max(0, min(100, value)))
-        self.step.setText(message)
+        self.step.setText(f"{message} · {value}%")
+
+    def set_idle(self) -> None:
+        self.progress.setProperty("active", False)
+        self.progress.setValue(0)
+        self.step.setText(i18n.t("idle_progress") + " · 0%")
 
     def clear_progress(self) -> None:
-        self.progress.hide()
-        self.step.hide()
-        self.progress.setValue(0)
-        self.step.clear()
+        self.set_idle()
 
     def closeEvent(self, event):  # keep running in tray
         event.ignore()

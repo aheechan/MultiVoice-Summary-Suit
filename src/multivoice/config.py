@@ -80,6 +80,11 @@ def load(config_dir: str | Path | None = None) -> Config:
         names = {p.get("name") for p in cfg.llm.get("providers", [])}
         if provider in names:
             cfg.llm["order"] = [provider]
+            model = prefs.get("model")
+            if model:
+                for item in cfg.llm.get("providers", []):
+                    if item.get("name") == provider:
+                        item["model"] = model
 
     return cfg
 

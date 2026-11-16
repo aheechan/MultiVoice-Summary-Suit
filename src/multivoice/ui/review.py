@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import glossary, research
+from .. import glossary, research, search
 from ..config import PROJECT_ROOT
 from . import i18n
 
@@ -25,6 +25,8 @@ class ReviewDialog(QDialog):
         super().__init__(parent)
         self.cfg = cfg
         self.lex = glossary.load()
+        self._searched = False
+        self._hints: dict[str, list[str]] = {}
 
         self.setWindowTitle(i18n.t("review_title"))
         self.setWindowIcon(QIcon(str(ASSETS / "icon.png")))
@@ -57,10 +59,27 @@ class ReviewDialog(QDialog):
             item.setFlags(Qt.ItemFlag.NoItemFlags)
             self.list.addItem(item)
             return
+
+        if not self._searched:
+            kept = []
+            for entry in self.lex.pending:
+                hits = search.bing(entry["term"], limit=3)
+                if not hits:
+                    # Nothing on the web: treat it as a mis-transcription and drop it.
+                    continue
+                self._hints[entry["term"]] = [h["title"] for h in hits[:2]]
+                kept.append(entry)
+            if len(kept) != len(self.lex.pending):
+                self.lex.pending = kept
+                self.lex.save()
+            self._searched = True
+
         for entry in self.lex.pending:
-            item = QListWidgetItem(
-                f"{entry['term']}   x{entry.get('count', 1)}   {entry.get('reason', '')}"
-            )
+            hints = self._hints.get(entry["term"], [])
+            text = f"{entry['term']}   x{entry.get('count', 1)}   {entry.get('reason', '')}"
+            if hints:
+                text += "\n    " + "  |  ".join(hints)
+            item = QListWidgetItem(text)
             item.setData(1, entry["term"])
             self.list.addItem(item)
 

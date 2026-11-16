@@ -38,6 +38,30 @@ def _job_dir(cfg: Config, source: Path) -> Path:
     return path
 
 
+def _output_dir(cfg: Config, job: Path) -> Path:
+    """Deliverables live in <YYYYMMDD>-<sequence>, stable across re-runs."""
+    manifest_path = job / "manifest.json"
+    if manifest_path.exists():
+        try:
+            saved = json.loads(manifest_path.read_text(encoding="utf-8"))
+            existing = saved.get("output_dir")
+            if existing:
+                return cfg.output / existing
+        except json.JSONDecodeError:
+            pass
+
+    day = datetime.now().strftime("%Y%m%d")
+    highest = 0
+    if cfg.output.exists():
+        for child in cfg.output.iterdir():
+            if not child.is_dir() or not child.name.startswith(f"{day}-"):
+                continue
+            suffix = child.name.split("-", 1)[1]
+            if suffix.isdigit():
+                highest = max(highest, int(suffix))
+    return cfg.output / f"{day}-{highest + 1:02d}"
+
+
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -98,7 +122,7 @@ def run(
         raise FileNotFoundError(source)
 
     job = _job_dir(cfg, source)
-    out = cfg.output / job.name
+    out = _output_dir(cfg, job)
     lex = glossary.load()
     lex.prune_pending()
 
@@ -244,6 +268,7 @@ def run(
         "source": str(source),
         "language": source_lang,
         "job": job.name,
+        "output_dir": out.name,
         "domain": context.get("domain", "other"),
         "segments": len(segments),
         "units": len(units),

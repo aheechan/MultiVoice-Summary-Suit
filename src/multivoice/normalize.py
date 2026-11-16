@@ -3,9 +3,13 @@ from __future__ import annotations
 import re
 
 # ASR often renders Latin+digit names with Chinese numerals: V4 -> V四, Work8 -> Work八.
-LETTER_DIGIT = re.compile(r"([A-Za-z])([一二三四五六七八九])")
-# Years spoken digit by digit: 二零二六 -> 2026 (only when followed by 年).
-SPOKEN_YEAR = re.compile(r"(?<!\d)([零一二三四五六七八九]{4})(?=年)")
+# Only convert when the numeral is followed by a Latin letter or the end of a token,
+# otherwise "Pro一起" would become "Pro1起".
+LETTER_DIGIT = re.compile(r"([A-Za-z])([一二三四五六七八九])(?=[A-Za-z]|$)")
+# Years spoken digit by digit: 二零二六 -> 2026.
+SPOKEN_YEAR = re.compile(
+    r"(?<!\d)([零一二三四五六七八九]{4})(?=年|上半年|下半年|上|下)"
+)
 
 CN_DIGIT = {
     "零": "0", "一": "1", "二": "2", "三": "3", "四": "4",

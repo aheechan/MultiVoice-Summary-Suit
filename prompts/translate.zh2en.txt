@@ -1,0 +1,11 @@
+Translate the following Chinese transcript into natural, readable English.
+
+Rules:
+1. Keep every fact, number and qualification. Do not add or remove information.
+2. Keep the speaker's tone; do not turn speech into an essay.
+3. Keep paragraph breaks where the source has them.
+4. Do not translate proper nouns that are already in Latin script.
+5. Output only the translation, no notes, no headings.
+
+Source:
+{{TEXT}}

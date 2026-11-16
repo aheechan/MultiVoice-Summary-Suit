@@ -80,8 +80,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--input", required=True)
     run_parser.add_argument("--lang", default="auto")
     run_parser.add_argument(
-        "--stages", default="asr,correct,extract,generate",
-        help="comma separated: asr,correct,extract,generate",
+        "--stages", default="asr,correct,translate,extract,generate",
+        help="comma separated: asr,correct,translate,extract,generate",
+    )
+    run_parser.add_argument(
+        "--no-resume", action="store_true", help="ignore cached job artifacts"
     )
 
     args = parser.parse_args(argv)
@@ -91,7 +94,10 @@ def main(argv: list[str] | None = None) -> int:
         return doctor(cfg)
 
     stages = tuple(s.strip() for s in args.stages.split(",") if s.strip())
-    out = pipeline.run(Path(args.input), cfg, language=args.lang, stages=stages)
+    out = pipeline.run(
+        Path(args.input), cfg, language=args.lang, stages=stages,
+        resume=not args.no_resume,
+    )
     print(f"done -> {out}")
     return 0
 

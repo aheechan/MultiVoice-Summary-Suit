@@ -10,3 +10,7 @@ root = "D:/Local Repositories/_models"
 [tools]
 ffmpeg = "ffmpeg"
 ffprobe = "ffprobe"
+
+[output]
+# 需要输出哪些语言的双语文本（与识别语种不同的会自动翻译）
+languages = ["zh", "en"]

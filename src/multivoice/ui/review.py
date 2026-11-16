@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressDialog,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -200,6 +202,11 @@ class ReviewDialog(QDialog):
         self.scroll.setWidget(self.container)
         layout.addWidget(self.scroll, 1)
 
+        self.status = QLabel("")
+        self.status.setObjectName("titles")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
         row = QDialogButtonBox()
         self.btn_add = QPushButton(i18n.t("add_to_kb"))
         self.btn_research = QPushButton(i18n.t("research_selected"))
@@ -331,12 +338,41 @@ class ReviewDialog(QDialog):
         self.reload()
 
     def research_selected(self) -> None:
-        for term in self.selected_terms():
+        terms = self.selected_terms()
+        if not terms:
+            self.status.setText(i18n.t("nothing_pending"))
+            return
+
+        progress = QProgressDialog(i18n.t("researching"), "", 0, len(terms), self)
+        progress.setWindowTitle(i18n.t("research_selected"))
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        QApplication.processEvents()
+
+        saved = unconfirmed = dropped = 0
+        for index, term in enumerate(terms, 1):
+            progress.setLabelText(f"{term}  ({index}/{len(terms)})")
+            QApplication.processEvents()
+
             entry, ambiguous = research.research_term(term, self.lex, self.cfg)
-            if entry:
+            if entry is not None:
                 self.lex.resolve_pending(term)
+                saved += 1
             elif ambiguous:
                 self.lex.queue(term, reason="still unconfirmed")
+                unconfirmed += 1
+            else:
+                self.lex.resolve_pending(term)
+                dropped += 1
+
+            progress.setValue(index)
+            QApplication.processEvents()
+
+        progress.close()
+        self.status.setText(i18n.t("rs_status", saved=saved,
+                                   pending=unconfirmed, dropped=dropped))
         self.reload()
 
     def drop_selected(self) -> None:

@@ -25,15 +25,15 @@ model = "audio/demucs-htdemucs-ft"
 
 [llm]
 temperature = 0.2
-# Qwen3 等带思考模式的模型必须开启，否则推理会占满输出预算
-no_think = true
+# 推理型模型（如 Qwen3.5）必须关闭思考，否则正文为空
+thinking = false
 # 按顺序尝试，前一个失败自动回落
 order = ["local"]
 
 [[llm.providers]]
 name = "local"
-base_url = "http://127.0.0.1:8095/v1"
-model = "qwen3-1.7b"
+base_url = "http://127.0.0.1:8082/v1"
+model = "Qwen3.5-9B"
 api_key = "EMPTY"
 timeout_s = 180
 

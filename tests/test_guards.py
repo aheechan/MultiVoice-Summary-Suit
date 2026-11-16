@@ -24,10 +24,11 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(out, "整理后的两句话。")
 
     def test_brief_rejects_long_output(self):
-        units = [{"id": "k1", "detail": "短"}]
+        units = [{"id": "k1", "title": "短标题", "detail": "细节"}]
         with unittest.mock.patch.object(generate, "chat", return_value="很长的快报" * 50):
             out = generate.brief(units, cfg=None, transcript="原文本")
-        self.assertEqual(out, "原文本")
+        self.assertIn("短标题", out)
+        self.assertNotIn("很长的快报", out)
 
     def test_empty_answer_falls_back(self):
         segments = [Segment(0, 0.0, 1.0, "原文")]
@@ -59,18 +60,16 @@ class VerifyTests(unittest.TestCase):
         findings = verify.suggest(items, evidence)
         terms = {f["term"] for f in findings}
         self.assertIn("红线", terms)
-        candidate = next(f for f in findings if f["term"] == "红线")
-        self.assertIn("洪宪", candidate["candidates"])
 
     def test_ignores_term_with_exact_entry(self):
         items = self.make_items()
         findings = verify.suggest(items, verify.wiki.format_evidence(items))
         self.assertNotIn("袁世凯", {f["term"] for f in findings})
 
-    def test_markdown_lists_candidates(self):
-        md = verify.to_markdown([{"term": "红线", "candidates": ["洪宪"]}])
+    def test_markdown_lists_terms(self):
+        md = verify.to_markdown([{"term": "红线", "candidates": []}])
         self.assertIn("红线", md)
-        self.assertIn("洪宪", md)
+        self.assertIn("待确认", md)
 
 
 class ClassifyTests(unittest.TestCase):

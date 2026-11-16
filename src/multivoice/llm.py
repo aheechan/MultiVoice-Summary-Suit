@@ -29,16 +29,11 @@ def _call(
     messages: list[dict],
     temperature: float,
     max_tokens: int,
-    no_think: bool = False,
+    thinking: bool,
 ) -> str:
     base = str(provider.get("base_url", "")).rstrip("/")
     if not base:
         raise RuntimeError("provider.base_url is empty")
-
-    if no_think and messages:
-        last = dict(messages[-1])
-        last["content"] = f"{last['content']}\n/no_think"
-        messages = messages[:-1] + [last]
 
     payload = {
         "model": provider.get("model", "local"),
@@ -46,6 +41,7 @@ def _call(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
+        "chat_template_kwargs": {"enable_thinking": thinking},
     }
     request = urllib.request.Request(
         f"{base}/chat/completions",
@@ -58,7 +54,17 @@ def _call(
     )
     with urllib.request.urlopen(request, timeout=provider.get("timeout_s", 180)) as resp:
         body = json.loads(resp.read().decode("utf-8"))
-    return body["choices"][0]["message"]["content"].strip()
+
+    choice = body["choices"][0]
+    content = (choice.get("message", {}).get("content") or "").strip()
+    if not content:
+        reasoning = choice.get("message", {}).get("reasoning_content") or ""
+        raise RuntimeError(
+            "empty content"
+            + (" (model spent the budget on reasoning; raise max_tokens or disable thinking)"
+               if reasoning else "")
+        )
+    return content
 
 
 def chat(
@@ -70,12 +76,13 @@ def chat(
 ) -> str:
     """Try providers in order; fall back on connection or protocol errors."""
     temp = cfg.llm.get("temperature", 0.2) if temperature is None else temperature
-    no_think = bool(cfg.llm.get("no_think", False))
+    thinking = bool(cfg.llm.get("thinking", False))
     errors: list[str] = []
     for provider in _providers(cfg):
         try:
-            return _call(provider, messages, temp, max_tokens, no_think)
-        except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError) as exc:
+            return _call(provider, messages, temp, max_tokens, thinking)
+        except (urllib.error.URLError, TimeoutError, KeyError, json.JSONDecodeError,
+                RuntimeError) as exc:
             errors.append(f"{provider.get('name', '?')}: {exc}")
             continue
     raise RuntimeError("all LLM providers failed -> " + " | ".join(errors))

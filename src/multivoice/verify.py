@@ -30,39 +30,27 @@ def build_evidence(terms: list[str], cfg: Config) -> tuple[str, list[dict]]:
 
 
 def suggest(items: list[dict], evidence: str) -> list[dict]:
-    """Flag terms with no exact encyclopedia entry but plausible alternatives.
+    """List terms that have no exact encyclopedia entry.
 
-    Candidates are only taken from snippets that also mention another entity
-    from the transcript, which keeps unrelated quoted words out.
+    We deliberately do not guess replacements: an unverified suggestion is worse
+    than no suggestion. The evidence block still goes to the model.
     """
-    all_terms = {item["term"] for item in items}
-    findings: list[dict] = []
-    for item in items:
-        term = item["term"]
-        if len(term) < 2:
-            continue
-        if any(hit["title"].strip() == term for hit in item["hits"]):
-            continue
-
-        anchors = all_terms - {term}
-        candidates: list[str] = []
-        for source in items:
-            for hit in source["hits"]:
-                if not _mentions(hit["snippet"], anchors):
-                    continue
-                for quoted in QUOTED.findall(hit["snippet"]):
-                    if quoted and quoted != term and quoted not in all_terms:
-                        if quoted not in candidates:
-                            candidates.append(quoted)
-        if candidates:
-            findings.append({"term": term, "candidates": candidates[:3]})
-    return findings
+    exact_terms = {
+        item["term"]
+        for item in items
+        if any(hit["title"].strip() == item["term"] for hit in item["hits"])
+    }
+    return [
+        {"term": item["term"], "candidates": []}
+        for item in items
+        if len(item["term"]) >= 2 and item["term"] not in exact_terms
+    ]
 
 
 def to_markdown(findings: list[dict]) -> str:
     if not findings:
         return ""
-    lines = ["# 待确认的专有名词", "", "以下词语未在检索资料中出现，请人工核对：", ""]
+    lines = ["# 待确认的专有名词", "", "以下词语没有在检索资料中找到对应条目，请人工核对：", ""]
     for item in findings:
-        lines.append(f"- **{item['term']}** → 可能应为：{' / '.join(item['candidates'])}")
+        lines.append(f"- **{item['term']}**")
     return "\n".join(lines) + "\n"

@@ -345,6 +345,18 @@ def run_tray(cfg: Config, initial: Path | None = None) -> int:
     tray = TrayApp(cfg)
     tray.show()
 
+    QTimer.singleShot(
+        1200,
+        lambda: tray.showMessage(
+            APP_NAME,
+            "Running in the system tray.\n"
+            "Right-click the blue icon for options.\n"
+            "If you cannot see it, open the ^ overflow near the clock.",
+            QSystemTrayIcon.MessageIcon.Information,
+            9000,
+        ),
+    )
+
     if initial is not None:
         QTimer.singleShot(200, lambda: tray.start_job(initial, TRANSCRIBE_STAGES, "transcribe"))
 

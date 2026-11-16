@@ -44,23 +44,25 @@ def looks_like_entity(term: str) -> bool:
     return True
 
 
-def research_term(term: str, glossary: Glossary, cfg: Config) -> dict | None:
-    """Look up one term on the fly and store it with a validity window."""
+def research_term(term: str, glossary: Glossary, cfg: Config) -> tuple[dict | None, bool]:
+    """Look up one term on the fly.
+
+    Returns (entry, ambiguous). `ambiguous` is True when search found something
+    but the model could not confirm it; False means there is no such thing.
+    """
     existing = glossary.find(term)
     if existing is not None:
-        # Never overwrite a human-curated entry with an auto-generated one.
         if not existing.get("auto"):
-            return existing
+            return existing, False
         if not glossary.is_stale(existing):
-            return existing
+            return existing, False
 
     results = search.bing(f"{term} 是什么意思", limit=5)
     if not results:
         results = search.bing(term, limit=5)
-    # A real entity should show up in at least one result title; otherwise the
-    # term is probably an ASR artefact and must not enter the lexicon.
+    # No result title contains the term -> it is not a real thing. Drop it.
     if not results or not any(term in item["title"] for item in results):
-        return None
+        return None, False
     evidence = search.format_results(results)
 
     template = PROMPT.read_text(encoding="utf-8")
@@ -74,12 +76,12 @@ def research_term(term: str, glossary: Glossary, cfg: Config) -> dict | None:
                       temperature=0.0, max_tokens=1024)
         data = _parse(answer)
     except Exception:
-        return None
+        return None, True
 
     if data.get("definition") in ("资料不足", "", None):
-        return None
+        return None, True
     if data.get("confidence") == "low":
-        return None
+        return None, True
 
     entry = glossary.add(
         term,
@@ -93,7 +95,7 @@ def research_term(term: str, glossary: Glossary, cfg: Config) -> dict | None:
         sources=[item["url"] for item in results[:3]],
         auto=True,
     )
-    return entry
+    return entry, False
 
 
 def ensure_terms(
@@ -109,10 +111,13 @@ def ensure_terms(
             continue
         if not glossary.needs_research(term):
             continue
-        entry = research_term(term, glossary, cfg)
+        entry, ambiguous = research_term(term, glossary, cfg)
         if entry:
             done.append(entry)
+            glossary.resolve_pending(term)
             budget -= 1
-        else:
-            glossary.queue(term, reason="no reliable source")
+        elif ambiguous:
+            # Search found something but the model could not confirm it.
+            glossary.queue(term, reason="unconfirmed")
+        # otherwise: no such term anywhere -> drop silently
     return done

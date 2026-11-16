@@ -96,10 +96,15 @@ def glossary_command(args, cfg: config.Config) -> int:
         return 0
 
     if command == "research":
-        entry = research.research_term(args.term, lex, cfg)
+        entry, ambiguous = research.research_term(args.term, lex, cfg)
         if entry is None:
-            print("no reliable result; entry not saved")
+            if ambiguous:
+                lex.queue(args.term, reason="unconfirmed")
+                print("found something but could not confirm; queued for review")
+            else:
+                print("no such term found; discarded")
             return 1
+        lex.resolve_pending(args.term)
         print(f"saved: {entry['term']} kind={entry['kind']} ttl={entry['ttl_days']}")
         print(entry.get("definition", ""))
         return 0

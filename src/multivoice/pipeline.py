@@ -95,6 +95,7 @@ def run(
     job = _job_dir(cfg, source)
     out = cfg.output / job.name
     lex = glossary.load()
+    lex.prune_pending()
 
     audio = job / "audio.wav"
     if not (resume and audio.exists()):

@@ -91,6 +91,7 @@ class Glossary:
         for item in self.pending:
             if item["term"] == term:
                 item["count"] = item.get("count", 1) + 1
+                item["attempts"] = item.get("attempts", 1) + 1
                 item["last_seen"] = _today()
                 item["reason"] = reason
                 self.save()
@@ -98,11 +99,34 @@ class Glossary:
         self.pending.append({
             "term": term,
             "count": 1,
+            "attempts": 1,
             "reason": reason,
             "first_seen": _today(),
             "last_seen": _today(),
         })
         self.save()
+
+    def resolve_pending(self, term: str) -> None:
+        before = len(self.pending)
+        self.pending = [item for item in self.pending if item["term"] != term]
+        if len(self.pending) != before:
+            self.save()
+
+    def prune_pending(self, max_age_days: int = 14, max_attempts: int = 3) -> list[str]:
+        """Drop terms that never found a source: no evidence means no entry."""
+        keep: list[dict] = []
+        dropped: list[str] = []
+        for item in self.pending:
+            too_old = _age_days(item.get("first_seen", "")) > max_age_days
+            too_many = item.get("attempts", 1) >= max_attempts
+            if too_old or too_many:
+                dropped.append(item["term"])
+            else:
+                keep.append(item)
+        if dropped:
+            self.pending = keep
+            self.save()
+        return dropped
 
     def stats(self) -> dict:
         kinds: dict[str, int] = {}

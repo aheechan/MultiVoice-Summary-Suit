@@ -1,0 +1,51 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---- build / packaging (must live on D:) ----
+build/
+dist/
+release/
+wheels/
+.pylibs/
+
+# ---- models / weights ----
+models/
+*.gguf
+*.onnx
+*.pth
+*.ckpt
+*.safetensors
+
+# ---- runtime data ----
+logs/
+work/
+output/
+*.log
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.flac
+*.srt
+*.vtt
+
+# ---- local config ----
+config.toml
+configs/paths.toml
+configs/models.toml
+configs/glossary.csv
+.env
+*.token
+
+# ---- OS / editor ----
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+.DS_Store

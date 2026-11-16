@@ -1,0 +1,25 @@
+# 技术选型由使用者决定，本文件只是样例。
+# 引擎可选: qwen3 | whisper | external
+
+[asr]
+engine = "qwen3"
+# 相对 models.root 或绝对路径
+model = "asr/qwen3-asr"
+device = "cuda"
+language = "auto"
+
+[align]
+enabled = false
+model = "asr/qwen3-forced-aligner"
+
+[separate]
+enabled = false
+model = "audio/demucs-htdemucs-ft"
+
+[llm]
+# 任意 OpenAI 兼容端点（本地 llama-server 或云端）
+base_url = "http://127.0.0.1:8095/v1"
+model = "local"
+api_key = "EMPTY"
+temperature = 0.2
+timeout_s = 180

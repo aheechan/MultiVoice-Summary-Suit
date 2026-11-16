@@ -1,0 +1,12 @@
+[workspace]
+# 中间件与成品目录（必须在 D 盘）
+work = "D:/Local Repositories/MultiVoice-Summary-Suit/work"
+output = "D:/Local Repositories/MultiVoice-Summary-Suit/output"
+
+[models]
+# 模型根目录，models.toml 里的相对路径以此为基准
+root = "D:/Local Repositories/_models"
+
+[tools]
+ffmpeg = "ffmpeg"
+ffprobe = "ffprobe"

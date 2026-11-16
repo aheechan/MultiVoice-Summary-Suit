@@ -1,0 +1,20 @@
+你是信息分析员。从下面的转写稿中抽取所有独立的信息单元，输出 JSON。
+
+每个信息单元：
+{
+  "id": "k1",
+  "type": "concept | claim | data | method | case | quote | definition",
+  "title": "一句话概括",
+  "detail": "该信息单元的完整内容",
+  "evidence": ["原文中的关键句，可多条"],
+  "confidence": "high | medium | low"
+}
+
+要求：
+1. 宁可多抽，不要漏。一个数据、一个方法步骤、一个反例都算独立单元。
+2. evidence 必须是原文里出现过的句子，不要改写。
+3. 不要合并不同主题的单元。
+4. 只输出 JSON 数组，不要解释。
+
+原文：
+{{TEXT}}

@@ -40,6 +40,7 @@ config.toml
 configs/paths.toml
 configs/models.toml
 configs/glossary.csv
+configs/settings.json
 .env
 *.token
 

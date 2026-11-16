@@ -5,6 +5,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import settings
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_DIR = PROJECT_ROOT / "configs"
 
@@ -53,7 +55,7 @@ def load(config_dir: str | Path | None = None) -> Config:
         or r"D:/Local Repositories/_models"
     )
 
-    return Config(
+    cfg = Config(
         work=Path(workspace.get("work", r"D:/Local Repositories/MultiVoice-Summary-Suit/work")),
         output=Path(workspace.get("output", r"D:/Local Repositories/MultiVoice-Summary-Suit/output")),
         models_root=model_root,
@@ -68,6 +70,18 @@ def load(config_dir: str | Path | None = None) -> Config:
         research=models.get("research", {}),
         languages=list(paths.get("output", {}).get("languages", ["zh", "en"])),
     )
+
+    prefs = settings.load()
+    cfg.research["enabled"] = bool(prefs.get("auto_research", True))
+    cfg.research["max_terms"] = int(prefs.get("max_terms", 6))
+
+    provider = prefs.get("provider")
+    if provider:
+        names = {p.get("name") for p in cfg.llm.get("providers", [])}
+        if provider in names:
+            cfg.llm["order"] = [provider]
+
+    return cfg
 
 
 def resolve_model(cfg: Config, value: str | None) -> Path | None:

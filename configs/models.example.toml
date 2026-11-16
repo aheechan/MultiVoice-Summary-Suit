@@ -48,6 +48,7 @@ enabled = false
 [[llm.providers]]
 name = "cloud"
 base_url = "https://api.deepseek.com/v1"
+# DeepSeek 官方 API（按账号实际可用版本填写，例如 deepseek-chat / deepseek-v4）
 model = "deepseek-chat"
 api_key_env = "DEEPSEEK_API_KEY"
 timeout_s = 120

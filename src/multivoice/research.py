@@ -113,4 +113,6 @@ def ensure_terms(
         if entry:
             done.append(entry)
             budget -= 1
+        else:
+            glossary.queue(term, reason="no reliable source")
     return done

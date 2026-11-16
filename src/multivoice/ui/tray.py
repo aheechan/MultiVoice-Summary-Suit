@@ -10,13 +10,20 @@ from PySide6.QtCore import QSize, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QMenu,
     QMessageBox,
+    QSpinBox,
     QSystemTrayIcon,
+    QVBoxLayout,
 )
 
-from .. import __version__, pipeline
+from .. import __version__, pipeline, settings
 from ..config import PROJECT_ROOT, Config
 
 ASSETS = PROJECT_ROOT / "assets"
@@ -63,6 +70,52 @@ class Worker(QThread):
             self.failed.emit(str(exc))
 
 
+class SettingsDialog(QDialog):
+    """Minimal runtime settings: auto research, lookup budget, provider."""
+
+    def __init__(self, cfg: Config):
+        super().__init__()
+        self.setWindowTitle("Settings")
+        self.setWindowIcon(app_icon())
+        prefs = settings.load()
+
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+
+        self.auto = QCheckBox("Research unknown terms on the web")
+        self.auto.setChecked(bool(prefs.get("auto_research", True)))
+
+        self.limit = QSpinBox()
+        self.limit.setRange(0, 12)
+        self.limit.setValue(int(prefs.get("max_terms", 6)))
+
+        self.provider = QComboBox()
+        names = [p.get("name") for p in cfg.llm.get("providers", [])] or ["local"]
+        self.provider.addItems(names)
+        current = prefs.get("provider", names[0])
+        if current in names:
+            self.provider.setCurrentText(current)
+
+        form.addRow(self.auto)
+        form.addRow("Max lookups per job", self.limit)
+        form.addRow("Model provider", self.provider)
+
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def values(self) -> dict:
+        return {
+            "auto_research": self.auto.isChecked(),
+            "max_terms": self.limit.value(),
+            "provider": self.provider.currentText(),
+        }
+
+
 class TrayApp(QSystemTrayIcon):
     def __init__(self, cfg: Config):
         super().__init__(app_icon())
@@ -105,6 +158,9 @@ class TrayApp(QSystemTrayIcon):
         self.action_config = QAction("Open config folder", self)
         self.action_config.triggered.connect(lambda: self._open(PROJECT_ROOT / "configs"))
 
+        self.action_settings = QAction("Settings…", self)
+        self.action_settings.triggered.connect(self.show_settings)
+
         self.action_about = QAction(f"About {APP_NAME} {__version__}", self)
         self.action_about.triggered.connect(self.show_about)
 
@@ -122,6 +178,7 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addMenu(self.output_menu)
         self.menu.addAction(self.action_output_dir)
         self.menu.addAction(self.action_config)
+        self.menu.addAction(self.action_settings)
         self.menu.addAction(self.action_about)
         self.menu.addSeparator()
         self.menu.addAction(self.action_quit)
@@ -230,6 +287,21 @@ class TrayApp(QSystemTrayIcon):
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
         self._open(path)
+
+    def show_settings(self) -> None:
+        dialog = SettingsDialog(self.cfg)
+        if not dialog.exec():
+            return
+        prefs = settings.save(dialog.values())
+        self.cfg.research["enabled"] = prefs["auto_research"]
+        self.cfg.research["max_terms"] = prefs["max_terms"]
+        self.cfg.llm["order"] = [prefs["provider"]]
+        self.showMessage(
+            APP_NAME,
+            "Settings saved. They apply to the next job.",
+            QSystemTrayIcon.MessageIcon.Information,
+            4000,
+        )
 
     def show_about(self) -> None:
         QMessageBox.information(

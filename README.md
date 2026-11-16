@@ -72,9 +72,37 @@ python -m multivoice tray
 ```powershell
 mvs glossary list
 mvs glossary stale
+mvs glossary pending      # 搜不到、待人工确认的词
+mvs glossary stats        # 词条数、主题数、过期数
 mvs glossary add --term 梁圣 --alias 梁盛 --kind evergreen --topic deepseek --definition "..."
 mvs glossary research --term 新梗
 ```
+
+搜不到的词不会硬塞进词库，而是进入 `pending.jsonl` 排队，等人工确认后再 `add`。
+
+## 设置与模型
+
+托盘右键 **Settings…** 可以调整：
+
+| 项 | 说明 |
+|---|---|
+| Research unknown terms on the web | 是否自动联网核实新词/过期词 |
+| Max lookups per job | 单次任务最多查几个词（控制耗时） |
+| Model provider | `local` / `lan` / `cloud` 三选一 |
+
+设置写在 `configs/settings.json`，下次任务生效。
+
+云端走 DeepSeek 官方 API（`configs/models.example.toml` 的 `cloud` 段）：
+
+```toml
+[[llm.providers]]
+name = "cloud"
+base_url = "https://api.deepseek.com/v1"
+model = "deepseek-chat"
+api_key_env = "DEEPSEEK_API_KEY"
+```
+
+> 注意：**API 本身不联网搜索**。搜索是程序做的（Bing + 维基），检索结果再交给 DeepSeek 抽取和判断。所以"用 DeepSeek 4.1 自动上网"实际是"本地检索 + DeepSeek 理解"。
 
 词库位置：`D:\Local Repositories\MultiVoice-Summary-Suit\glossary\terms.jsonl`（不在仓库内）。
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import socket
 import sys
 import tempfile
@@ -68,6 +69,18 @@ def glossary_command(args, cfg: config.Config) -> int:
             print(f"{entry['term']}  (verified {entry.get('last_verified', '?')})")
         if not stale:
             print("(nothing stale)")
+        return 0
+
+    if command == "pending":
+        for item in sorted(lex.pending, key=lambda x: -x.get("count", 1)):
+            print(f"{item['term']:<20} x{item.get('count', 1)}  "
+                  f"first={item.get('first_seen')}  reason={item.get('reason')}")
+        if not lex.pending:
+            print("(nothing pending)")
+        return 0
+
+    if command == "stats":
+        print(json.dumps(lex.stats(), ensure_ascii=False, indent=2))
         return 0
 
     if command == "add":
@@ -159,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     gloss_sub = gloss.add_subparsers(dest="glossary_command", required=True)
     gloss_sub.add_parser("list", help="show every entry")
     gloss_sub.add_parser("stale", help="show entries that need re-checking")
+    gloss_sub.add_parser("pending", help="show terms that could not be verified")
+    gloss_sub.add_parser("stats", help="show lexicon statistics")
     add_parser = gloss_sub.add_parser("add", help="add or update an entry")
     add_parser.add_argument("--term", required=True)
     add_parser.add_argument("--alias", action="append", default=[])

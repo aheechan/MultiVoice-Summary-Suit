@@ -36,8 +36,10 @@ class Glossary:
     def __init__(self, path: Path | None = None):
         self.path = Path(path or DEFAULT_PATH)
         self.topics_path = self.path.with_name("topics.json")
+        self.pending_path = self.path.with_name("pending.jsonl")
         self.entries: list[dict] = []
         self.topics: dict[str, str] = {}
+        self.pending: list[dict] = []
         self.load()
 
     # ------------------------------------------------------------------ storage
@@ -59,6 +61,18 @@ class Glossary:
             except json.JSONDecodeError:
                 self.topics = {}
 
+        self.pending = []
+        if self.pending_path.exists():
+            with self.pending_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        self.pending.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("w", encoding="utf-8") as handle:
@@ -67,6 +81,43 @@ class Glossary:
         self.topics_path.write_text(
             json.dumps(self.topics, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        with self.pending_path.open("w", encoding="utf-8") as handle:
+            for item in self.pending:
+                handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+
+    # ------------------------------------------------------------------ pending
+    def queue(self, term: str, reason: str = "unverified") -> None:
+        """Remember a term we could not verify, so it can be reviewed later."""
+        for item in self.pending:
+            if item["term"] == term:
+                item["count"] = item.get("count", 1) + 1
+                item["last_seen"] = _today()
+                item["reason"] = reason
+                self.save()
+                return
+        self.pending.append({
+            "term": term,
+            "count": 1,
+            "reason": reason,
+            "first_seen": _today(),
+            "last_seen": _today(),
+        })
+        self.save()
+
+    def stats(self) -> dict:
+        kinds: dict[str, int] = {}
+        stale = 0
+        for entry in self.entries:
+            kinds[entry.get("kind", "other")] = kinds.get(entry.get("kind", "other"), 0) + 1
+            if self.is_stale(entry):
+                stale += 1
+        return {
+            "entries": len(self.entries),
+            "topics": len(self.topics),
+            "pending": len(self.pending),
+            "stale": stale,
+            "by_kind": kinds,
+        }
 
     # ------------------------------------------------------------------ freshness
     def is_stale(self, entry: dict) -> bool:

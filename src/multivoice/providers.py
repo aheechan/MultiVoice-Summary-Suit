@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -53,18 +54,41 @@ def masked(item: dict) -> str:
     return f"…{key[-4:]}" if key else "—"
 
 
+def reachable(cfg, timeout: float = 3.0) -> str:
+    """Return the first provider that answers, or an empty string."""
+    items = cfg.llm.get("providers", [])
+    order = cfg.llm.get("order") or [item.get("name") for item in items]
+    by_name = {item.get("name"): item for item in items}
+    for name in order:
+        item = by_name.get(name)
+        if not item or not item.get("enabled", True):
+            continue
+        if test(item, timeout=timeout)[0]:
+            return name
+    return ""
+
+
+def _open(url: str, request: urllib.request.Request, timeout: float):
+    host = urllib.parse.urlparse(url).hostname or ""
+    if host in ("127.0.0.1", "localhost", "::1", "0.0.0.0"):
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        return opener.open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 def test(item: dict, timeout: float = 8.0) -> tuple[bool, str]:
     base = str(item.get("base_url", "")).rstrip("/")
     if not base:
         return False, "base_url is empty"
     key = item.get("api_key") or ""
+    url = f"{base}/models"
     request = urllib.request.Request(
-        f"{base}/models",
+        url,
         headers={"Authorization": f"Bearer {key or 'EMPTY'}"},
         method="GET",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as resp:
+        with _open(url, request, timeout) as resp:
             body = resp.read().decode("utf-8", errors="ignore")
         return True, f"HTTP {resp.status}, {len(body)} bytes"
     except urllib.error.HTTPError as exc:

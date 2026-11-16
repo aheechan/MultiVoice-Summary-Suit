@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from .config import Config
@@ -22,6 +23,14 @@ def _api_key(provider: dict) -> str:
     if env:
         return os.environ.get(env, "")
     return provider.get("api_key", "EMPTY")
+
+
+def _opener(url: str):
+    """Loopback endpoints must bypass the system proxy (VPN clients set one)."""
+    host = urllib.parse.urlparse(url).hostname or ""
+    if host in ("127.0.0.1", "localhost", "::1", "0.0.0.0"):
+        return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    return urllib.request.build_opener()
 
 
 def _call(
@@ -52,7 +61,9 @@ def _call(
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=provider.get("timeout_s", 180)) as resp:
+    with _opener(f"{base}/chat/completions").open(
+        request, timeout=provider.get("timeout_s", 180)
+    ) as resp:
         body = json.loads(resp.read().decode("utf-8"))
 
     choice = body["choices"][0]

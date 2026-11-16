@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSize, QThread, QTimer, Signal
+from PySide6.QtCore import QLockFile, QSize, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from .. import __version__, discover, glossary, ingest, pipeline, settings
+from .. import __version__, discover, glossary, ingest, pipeline, providers, settings
 from ..config import PROJECT_ROOT, Config
 from . import i18n
 from .panel import Panel
@@ -316,6 +316,10 @@ class TrayApp(QSystemTrayIcon):
         self.action_quit = QAction(i18n.t("quit"), self)
         self.action_quit.triggered.connect(self.quit)
 
+        self.action_cancel = QAction(i18n.t("cancel_job"), self)
+        self.action_cancel.triggered.connect(self.cancel_job)
+        self.action_cancel.setEnabled(False)
+
         self.menu.addAction(self.action_run)
         self.menu.addAction(self.action_url)
         self.menu.addSeparator()
@@ -323,6 +327,7 @@ class TrayApp(QSystemTrayIcon):
             self.menu.addAction(self.action_generators[kind])
         self.menu.addSeparator()
         self.menu.addAction(self.action_status)
+        self.menu.addAction(self.action_cancel)
         self.menu.addSeparator()
         self.menu.addAction(self.action_panel)
         self.menu.addAction(self.action_review)
@@ -353,6 +358,7 @@ class TrayApp(QSystemTrayIcon):
     def _refresh(self) -> None:
         busy = bool(self.worker and self.worker.isRunning())
         self.action_run.setEnabled(not busy)
+        self.action_cancel.setEnabled(busy)
         for action in self.action_generators.values():
             action.setEnabled(not busy and self.transcript_ready)
         for key, action in self.output_actions.items():
@@ -451,6 +457,11 @@ class TrayApp(QSystemTrayIcon):
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
 
+        if any(step in stages for step in ("correct", "translate", "extract", "generate")):
+            if not providers.reachable(self.cfg):
+                self.on_error(i18n.t("llm_unreachable"))
+                return
+
         self.last_source = source
         self.panel_status = i18n.t("status_working", name=source.name)
         self.action_status.setText(self.panel_status)
@@ -511,6 +522,19 @@ class TrayApp(QSystemTrayIcon):
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
         self.start_job(self.last_source, GENERATE_STAGES, "generate", (kind,))
+
+    def cancel_job(self) -> None:
+        if not (self.worker and self.worker.isRunning()):
+            return
+        self.worker.terminate()
+        self.worker.wait(2000)
+        self.panel_status = i18n.t("job_cancelled")
+        self.action_status.setText(self.panel_status)
+        if self.panel is not None:
+            self.panel.clear_progress()
+        self.showMessage(i18n.t("app_name"), i18n.t("job_cancelled"),
+                         QSystemTrayIcon.MessageIcon.Information, 4000)
+        self._refresh()
 
     def open_output(self, kind: str) -> None:
         path = self._output_path(kind)
@@ -595,6 +619,14 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName(i18n.t("app_name"))
     app.setQuitOnLastWindowClosed(False)
+
+    cfg.work.mkdir(parents=True, exist_ok=True)
+    lock = QLockFile(str(cfg.work / ".instance.lock"))
+    lock.setStaleLockTime(0)
+    if not lock.tryLock(100):
+        print("MultiVoice is already running. Use the tray icon to open it.")
+        return 0
+    app._instance_lock = lock  # type: ignore[attr-defined]
 
     selftest = bool(os.environ.get("MVS_TRAY_SELFTEST"))
     if not selftest and not QSystemTrayIcon.isSystemTrayAvailable():

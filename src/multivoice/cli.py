@@ -3,10 +3,11 @@ from __future__ import annotations
 import argparse
 import socket
 import sys
+import tempfile
 import urllib.parse
 from pathlib import Path
 
-from . import config, ingest, pipeline
+from . import bgm, config, ingest, pipeline, vad
 
 
 def _ok(label: str, value: str) -> None:
@@ -19,6 +20,29 @@ def _bad(label: str, value: str) -> None:
 
 def _warn(label: str, value: str) -> None:
     print(f"[WARN] {label}: {value}")
+
+
+def probe_file(source: Path, cfg: config.Config) -> int:
+    """Report speech chunks and background-music level without running ASR."""
+    work = Path(tempfile.mkdtemp(prefix="mvs-probe-"))
+    audio = work / "audio.wav"
+    ingest.extract_audio(source, audio, cfg.ffmpeg)
+
+    spans = vad.detect_speech_spans(audio, cfg.ffmpeg)
+    chunks = vad.merge_spans(spans, max_seconds=30.0)
+    info = bgm.analyze(audio)
+    duration = sum(s.duration for s in chunks)
+
+    print(f"file      : {source.name}")
+    print(f"speech    : {duration:.1f}s in {len(chunks)} chunk(s)")
+    print(f"speech dB : {info['speech_db']}")
+    print(f"floor dB  : {info['floor_db']}")
+    print(f"gap       : {info['gap_db']} dB")
+    print(f"verdict   : {info['verdict']}")
+    print(f"advice    : {info['advice']}")
+    for index, chunk in enumerate(chunks):
+        print(f"  chunk {index}: {chunk.start:6.2f}s -> {chunk.end:6.2f}s")
+    return 0
 
 
 def doctor(cfg: config.Config) -> int:
@@ -76,6 +100,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="check tools, config and models")
 
+    probe_parser = sub.add_parser("probe", help="report speech chunks and BGM level")
+    probe_parser.add_argument("--input", required=True)
+
     run_parser = sub.add_parser("run", help="process one file or URL")
     run_parser.add_argument("--input", required=True)
     run_parser.add_argument("--lang", default="auto")
@@ -92,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return doctor(cfg)
+
+    if args.command == "probe":
+        return probe_file(Path(args.input), cfg)
 
     stages = tuple(s.strip() for s in args.stages.split(",") if s.strip())
     out = pipeline.run(

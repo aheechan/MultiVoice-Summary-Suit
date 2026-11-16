@@ -40,6 +40,11 @@ class TranslateTests(unittest.TestCase):
         self.assertEqual(translate.paragraphs(segments, "en"), ["hello world"])
 
 
+class FakeEngine:
+    def transcribe(self, audio):
+        return [Segment(0, 0.0, 2.0, "这是测试。")], "zh"
+
+
 class PipelineTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="mvs-test-"))
@@ -56,8 +61,7 @@ class PipelineTests(unittest.TestCase):
             languages=["zh", "en"],
         )
         self.patches = [
-            unittest.mock.patch.object(pipeline.asr, "transcribe",
-                                       return_value=([Segment(0, 0.0, 2.0, "这是测试。")], "zh")),
+            unittest.mock.patch.object(pipeline.asr, "build", return_value=FakeEngine()),
             unittest.mock.patch.object(correct, "chat", fake_chat),
             unittest.mock.patch.object(structure, "chat", fake_chat),
             unittest.mock.patch.object(generate, "chat", fake_chat),

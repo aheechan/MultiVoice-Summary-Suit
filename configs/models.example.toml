@@ -8,6 +8,13 @@ model = "asr/qwen3-asr"
 device = "cuda"
 language = "auto"
 
+[vad]
+enabled = true
+# 16 GB 显存下 30 秒是安全上限；再长只会增加峰值显存和延迟
+max_seconds = 30
+min_silence = 0.45
+noise_db = -32
+
 [align]
 enabled = false
 model = "asr/qwen3-forced-aligner"

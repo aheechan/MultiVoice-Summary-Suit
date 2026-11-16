@@ -20,6 +20,7 @@ class Config:
     align: dict = field(default_factory=dict)
     separate: dict = field(default_factory=dict)
     llm: dict = field(default_factory=dict)
+    vad: dict = field(default_factory=dict)
     languages: list = field(default_factory=lambda: ["zh", "en"])
 
 
@@ -60,6 +61,7 @@ def load(config_dir: str | Path | None = None) -> Config:
         align=models.get("align", {}),
         separate=models.get("separate", {}),
         llm=models.get("llm", {}),
+        vad=models.get("vad", {}),
         languages=list(paths.get("output", {}).get("languages", ["zh", "en"])),
     )
 

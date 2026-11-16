@@ -18,17 +18,41 @@ class Segment:
         return asdict(self)
 
 
+class Engine:
+    """Loads the model once and transcribes many chunks."""
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self._model = None
+        self._kind = str(cfg.asr.get("engine", "qwen3")).lower()
+
+    def load(self) -> None:
+        if self._model is not None:
+            return
+        if self._kind == "qwen3":
+            self._model = _load_qwen3(self.cfg)
+        elif self._kind == "whisper":
+            self._model = _load_whisper(self.cfg)
+        else:
+            raise RuntimeError(f"unknown asr engine: {self._kind}")
+
+    def transcribe(self, audio: Path) -> tuple[list[Segment], str]:
+        self.load()
+        if self._kind == "qwen3":
+            return _run_qwen3(self._model, audio, self.cfg)
+        return _run_whisper(self._model, audio, self.cfg)
+
+
+def build(cfg: Config) -> Engine:
+    return Engine(cfg)
+
+
 def transcribe(audio: Path, cfg: Config) -> tuple[list[Segment], str]:
-    """Return segments and the detected language."""
-    engine = str(cfg.asr.get("engine", "qwen3")).lower()
-    if engine == "qwen3":
-        return _qwen3(audio, cfg)
-    if engine == "whisper":
-        return _whisper(audio, cfg)
-    raise RuntimeError(f"unknown asr engine: {engine}")
+    """One-shot helper kept for simple callers and tests."""
+    return Engine(cfg).transcribe(audio)
 
 
-def _qwen3(audio: Path, cfg: Config) -> tuple[list[Segment], str]:
+def _load_qwen3(cfg: Config):
     try:
         from qwen_asr import Qwen3ASRModel  # type: ignore
     except ImportError as exc:
@@ -37,37 +61,40 @@ def _qwen3(audio: Path, cfg: Config) -> tuple[list[Segment], str]:
     model_path = resolve_model(cfg, cfg.asr.get("model"))
     if model_path is None or not Path(model_path).exists():
         raise RuntimeError(f"ASR model not found: {model_path}")
-
-    model = Qwen3ASRModel.from_pretrained(
+    return Qwen3ASRModel.from_pretrained(
         str(model_path), device_map=cfg.asr.get("device", "cuda")
     )
+
+
+def _run_qwen3(model, audio: Path, cfg: Config) -> tuple[list[Segment], str]:
     language = cfg.asr.get("language", "auto")
     result = model.transcribe(
         audio=str(audio),
         language=None if language in (None, "", "auto") else language,
     )[0]
-
     text = (result.text or "").strip()
     lang = getattr(result, "language", "") or ""
-    # Without a forced aligner the engine returns one block; keep it as one segment.
-    return [Segment(index=0, start=0.0, end=0.0, text=text, lang=lang)], lang
+    return [Segment(0, 0.0, 0.0, text, lang)], lang
 
 
-def _whisper(audio: Path, cfg: Config) -> tuple[list[Segment], str]:
+def _load_whisper(cfg: Config):
     try:
         from faster_whisper import WhisperModel  # type: ignore
     except ImportError as exc:
         raise RuntimeError("whisper engine requires: pip install faster-whisper") from exc
 
     model_path = resolve_model(cfg, cfg.asr.get("model"))
-    model = WhisperModel(
+    return WhisperModel(
         str(model_path) if model_path else "large-v3",
         device=cfg.asr.get("device", "cuda"),
         compute_type="float16",
     )
+
+
+def _run_whisper(model, audio: Path, cfg: Config) -> tuple[list[Segment], str]:
     segments, info = model.transcribe(str(audio), vad_filter=True)
     items = [
-        Segment(index=i, start=s.start, end=s.end, text=s.text.strip(), lang=info.language)
+        Segment(i, s.start, s.end, s.text.strip(), info.language)
         for i, s in enumerate(segments)
     ]
     return items, info.language

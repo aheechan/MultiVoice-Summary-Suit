@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from . import asr, correct, generate, ingest, structure, translate
+from . import asr, bgm, correct, generate, ingest, structure, translate, vad
 from .asr import Segment
 from .config import Config
 
@@ -29,6 +29,38 @@ def _read_segments(path: Path) -> list[Segment]:
     return [Segment(**item) for item in data]
 
 
+def _transcribe_chunked(audio: Path, cfg: Config, job: Path) -> tuple[list[Segment], str]:
+    """Split on speech boundaries, transcribe each chunk, keep global timestamps."""
+    engine = asr.build(cfg)
+    spans = vad.detect_speech_spans(
+        audio,
+        cfg.ffmpeg,
+        noise_db=float(cfg.vad.get("noise_db", -32)),
+        min_silence=float(cfg.vad.get("min_silence", 0.45)),
+    )
+    chunks = vad.merge_spans(
+        spans,
+        max_seconds=float(cfg.vad.get("max_seconds", 30)),
+    )
+    if not chunks:
+        chunks = [vad.Span(0.0, vad._duration(audio, cfg.ffmpeg))]
+
+    segments: list[Segment] = []
+    language = ""
+    for index, span in enumerate(chunks):
+        chunk_path = job / "chunks" / f"{index:03d}.wav"
+        vad.cut(audio, span, chunk_path, cfg.ffmpeg)
+        items, lang = engine.transcribe(chunk_path)
+        language = language or lang
+        for item in items:
+            start = span.start + item.start
+            end = span.start + (item.end if item.end > 0 else span.duration)
+            segments.append(
+                Segment(len(segments), start, end, item.text, item.lang or lang)
+            )
+    return segments, language
+
+
 def run(
     source: Path,
     cfg: Config,
@@ -50,16 +82,24 @@ def run(
 
     raw_json = job / "segments.raw.json"
     fixed_json = job / "segments.corrected.json"
+    manifest_path = job / "manifest.json"
+    detected = ""
+    if resume and manifest_path.exists():
+        try:
+            detected = json.loads(manifest_path.read_text(encoding="utf-8")).get("language", "")
+        except json.JSONDecodeError:
+            detected = ""
 
     if resume and fixed_json.exists():
         segments = _read_segments(fixed_json)
-        detected = json.loads((job / "manifest.json").read_text(encoding="utf-8")).get("language", "")
     else:
         if resume and raw_json.exists():
             segments = _read_segments(raw_json)
-            detected = ""
         else:
-            segments, detected = asr.transcribe(audio, cfg)
+            if cfg.vad.get("enabled", True):
+                segments, detected = _transcribe_chunked(audio, cfg, job)
+            else:
+                segments, detected = asr.transcribe(audio, cfg)
             _write(raw_json, json.dumps([s.to_dict() for s in segments],
                                         ensure_ascii=False, indent=2))
 
@@ -70,6 +110,9 @@ def run(
 
     transcript = "\n".join(seg.text for seg in segments)
     _write(job / "transcript.txt", transcript)
+
+    background = bgm.analyze(audio)
+    _write(job / "bgm.json", json.dumps(background, ensure_ascii=False, indent=2))
 
     source_lang = (detected or "").lower()[:2] or "zh"
     if "translate" in stages:
@@ -100,7 +143,8 @@ def run(
         "job": job.name,
         "segments": len(segments),
         "units": len(units),
+        "bgm": background,
         "updated": datetime.now().isoformat(timespec="seconds"),
     }
-    _write(job / "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+    _write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))
     return out

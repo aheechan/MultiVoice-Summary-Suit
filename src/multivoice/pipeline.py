@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from . import (asr, bgm, classify, correct, generate, ingest, structure,
-               translate, vad, verify)
+from . import (asr, bgm, classify, correct, generate, ingest, normalize,
+               structure, translate, vad, verify)
 from .asr import Segment
 from .config import Config
 
@@ -103,6 +103,7 @@ def run(
     fixed_json = job / "segments.corrected.json"
     manifest_path = job / "manifest.json"
     detected = ""
+    normalized_count = 0
     if resume and manifest_path.exists():
         try:
             detected = json.loads(manifest_path.read_text(encoding="utf-8")).get("language", "")
@@ -119,6 +120,7 @@ def run(
                 segments, detected = _transcribe_chunked(audio, cfg, job)
             else:
                 segments, detected = asr.transcribe(audio, cfg)
+            segments, normalized_count = normalize.normalize_segments(segments)
             _write(raw_json, json.dumps([s.to_dict() for s in segments],
                                         ensure_ascii=False, indent=2))
 

@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtCore import QSize, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,6 +21,19 @@ from ..config import PROJECT_ROOT, Config
 
 ASSETS = PROJECT_ROOT / "assets"
 APP_NAME = "MultiVoice Summary Suit"
+
+
+def app_icon() -> QIcon:
+    """Multi-resolution icon: the compact artwork carries the 16–48 px sizes."""
+    icon = QIcon()
+    for size in (16, 24, 32, 48):
+        path = ASSETS / f"icon-{size}.png"
+        if path.exists():
+            icon.addFile(str(path), QSize(size, size))
+    detailed = ASSETS / "icon.svg"
+    if detailed.exists():
+        icon.addFile(str(detailed))
+    return icon
 
 AUDIO_FILTER = (
     "Media files (*.mp4 *.mkv *.mov *.webm *.mp3 *.wav *.m4a *.flac *.aac);;"
@@ -52,7 +65,7 @@ class Worker(QThread):
 
 class TrayApp(QSystemTrayIcon):
     def __init__(self, cfg: Config):
-        super().__init__(QIcon(str(ASSETS / "icon.svg")))
+        super().__init__(app_icon())
         self.cfg = cfg
         self.worker: Worker | None = None
 

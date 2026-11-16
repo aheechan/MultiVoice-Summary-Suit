@@ -1,7 +1,6 @@
-"""Render assets/icon.svg to PNG and ICO for the tray and installers."""
+"""Render icon SVGs to PNG sizes for the tray and installers."""
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt
@@ -9,11 +8,11 @@ from PySide6.QtGui import QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 ROOT = Path(__file__).resolve().parents[1]
-SVG = ROOT / "assets" / "icon.svg"
+ASSETS = ROOT / "assets"
 
 
-def render(size: int, target: Path) -> None:
-    renderer = QSvgRenderer(str(SVG))
+def render(svg: Path, size: int, target: Path) -> None:
+    renderer = QSvgRenderer(str(svg))
     image = QImage(QSize(size, size), QImage.Format.Format_ARGB32)
     image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
@@ -24,12 +23,20 @@ def render(size: int, target: Path) -> None:
 
 
 def main() -> int:
-    assets = ROOT / "assets"
-    render(256, assets / "icon.png")
-    render(64, assets / "icon-64.png")
-    render(32, assets / "icon-32.png")
-    render(16, assets / "icon-16.png")
-    print("wrote", assets / "icon.png")
+    detailed = ASSETS / "icon.svg"
+    compact = ASSETS / "icon-small.svg"
+    tiny = ASSETS / "icon-16.svg"
+
+    render(detailed, 256, ASSETS / "icon.png")
+    render(detailed, 128, ASSETS / "icon-128.png")
+    render(detailed, 64, ASSETS / "icon-64.png")
+
+    # Small sizes use simplified artwork so the center ring survives.
+    render(tiny, 16, ASSETS / "icon-16.png")
+    for size in (24, 32, 48):
+        render(compact, size, ASSETS / f"icon-{size}.png")
+
+    print("rendered icons in", ASSETS)
     return 0
 
 

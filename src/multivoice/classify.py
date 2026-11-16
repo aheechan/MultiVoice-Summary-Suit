@@ -20,6 +20,20 @@ DOMAINS = {
     "other": "其他",
 }
 
+# Models often answer with a synonym instead of the exact key.
+DOMAIN_ALIASES = {
+    "technology": "tech", "technical": "tech", "it": "tech", "software": "tech",
+    "ai": "tech", "product": "tech", "computing": "tech",
+    "economy": "business", "finance": "business", "economics": "business",
+    "management": "business", "marketing": "business",
+    "politics": "history", "political": "history", "person": "history",
+    "medical": "science", "medicine": "science", "health": "life",
+    "policy": "law", "legal": "law", "government": "law",
+    "learning": "education", "teaching": "education",
+    "art": "culture", "entertainment": "culture", "media": "culture",
+    "daily": "life", "lifestyle": "life",
+}
+
 
 def _parse(text: str) -> dict:
     fenced = re.search(r"```(?:json)?\s*(.*?)```", text, re.S)
@@ -42,7 +56,8 @@ def classify(text: str, cfg: Config) -> dict:
     except Exception:
         return {"domain": "other", "label": DOMAINS["other"], "terms": []}
 
-    domain = data.get("domain", "other")
+    domain = str(data.get("domain", "other")).strip().lower()
+    domain = DOMAIN_ALIASES.get(domain, domain)
     if domain not in DOMAINS:
         domain = "other"
     terms = [t for t in data.get("terms", []) if isinstance(t, str) and t.strip()]

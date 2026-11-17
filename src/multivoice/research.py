@@ -102,6 +102,30 @@ def research_term(term: str, glossary: Glossary, cfg: Config) -> tuple[dict | No
     return entry, False
 
 
+def triage(terms: list[str], cfg: Config, context: str = "") -> list[str]:
+    """Split candidates into proper nouns (worth a lexicon entry) and ordinary phrases."""
+    terms = [t for t in terms if t]
+    if not terms or cfg is None:
+        return terms
+    prompt = (
+        "下面是一段口播转写里抽出的词。请把它们分成两类：\n"
+        "A. 专有名词：人名、地名、机构、产品/版本、作品、具体事件名——值得建词条；\n"
+        "B. 其余：网络流行语、形容词短语、常见名词组合、口语表达——识别正确，不需要建词条。\n\n"
+        "只输出 JSON：{\"entity\": [...], \"common\": [...]}\n"
+        f"上下文片段：{context[:400]}\n"
+        f"词表：{json.dumps(terms, ensure_ascii=False)}"
+    )
+    try:
+        answer = chat([{"role": "user", "content": prompt}], cfg,
+                      temperature=0.0, max_tokens=400)
+        start, end = answer.find("{"), answer.rfind("}")
+        data = json.loads(answer[start:end + 1])
+        entity = [t for t in data.get("entity", []) if t in terms]
+        return entity or terms
+    except Exception:
+        return terms
+
+
 def queue_candidates(
     terms: list[str], glossary: Glossary, limit: int = 8,
     reason: str = "from-job", context: str = "",

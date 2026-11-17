@@ -95,13 +95,58 @@ def _probable_name(term: str) -> bool:
     return len(term.split()) >= 2 and len(term) >= 5
 
 
+def _try_correction(term: str, cfg: Config) -> str:
+    """If the model suggests a homophone/proper-noun fix that has evidence, adopt it."""
+    from . import glossary as glossary_module
+    from . import research
+
+    lex = glossary_module.load()
+    context = ""
+    for item in lex.pending:
+        if item["term"] == term:
+            context = item.get("context", "")
+            break
+    if not context:
+        return ""
+
+    suggestion = research.suggest_correction(term, context, cfg)
+    if not suggestion or suggestion == term:
+        return ""
+    if not sources.collect(suggestion):
+        return ""
+
+    other = build(suggestion, cfg)  # one level of recursion
+    lex = glossary_module.load()  # build() may have written a new entry
+    entry = lex.find(suggestion)
+    if entry is None:
+        return ""
+    if term not in entry.get("aliases", []):
+        entry.setdefault("aliases", []).append(term)
+        lex.save()
+    lex.resolve_pending(term)
+    return suggestion
+
+
 def build(term: str, cfg: Config) -> dict | None:
     """Collect multi-source evidence, summarise it, and auto-save exact matches."""
     from . import glossary as glossary_module
 
     evidence = sources.collect(term)
     if not evidence:
-        # Persist the "nothing found" state so the UI visibly updates.
+        # Try an in-context spelling correction before giving up.
+        corrected = _try_correction(term, cfg)
+        if corrected:
+            record = {
+                "zh": [], "en": [], "evidence": [],
+                "summary_zh": "", "summary_en": "",
+                "empty": True, "corrected_to": corrected,
+                "at": date.today().isoformat(),
+            }
+            data = _read_cache()
+            data[term] = record
+            _write_cache(data)
+            return record
+
         record = {
             "zh": [], "en": [], "evidence": [],
             "summary_zh": "", "summary_en": "",

@@ -200,7 +200,9 @@ def run(
             candidates += [entry["term"] for entry in lex.match(head)]
             report(66, "research")
             # Never write new terms silently: queue them for human review.
-            queued_terms = research.queue_candidates(candidates, lex, context=head)
+            queued_terms = research.queue_candidates(
+                research.triage(candidates, cfg, head), lex, context=head
+            )
             researched = []
             glossary_text, _ = lex.context_for(head)
 

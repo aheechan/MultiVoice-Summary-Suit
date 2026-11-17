@@ -95,37 +95,34 @@ def baike(term: str) -> dict | None:
         f"?scope=103&format=json&appid=379020&bk_length=600&bk_key={urllib.parse.quote(term)}"
     )
     data = _get_json(api)
-    if data:
-        result = data.get("result") or {}
-        abstract = (result.get("abstract") or "").strip()
-        title = result.get("lemmaTitle") or term
-        if abstract and _relevant(term, title, abstract):
-            return {
-                "source": "Baidu Baike",
-                "title": title,
-                "snippet": abstract[:600],
-                "url": f"https://baike.baidu.com/item/{urllib.parse.quote(title)}",
-                "exact": term in title,
-            }
+    if not data:
+        return None
 
-    html = _get_text(f"https://baike.baidu.com/item/{urllib.parse.quote(term)}")
-    if not html:
-        return None
-    start = html.find('class="lemma-summary"')
-    if start < 0:
-        return None
-    chunk = html[start:start + 2500]
-    text = unescape("".join(ch for ch in chunk if ch not in "<>"))
-    text = " ".join(text.split())
-    if not _relevant(term, term, text):
+    title = data.get("title") or data.get("key") or term
+    parts: list[str] = []
+    if data.get("desc"):
+        parts.append(str(data["desc"]))
+    for card in (data.get("card") or [])[:6]:
+        name = card.get("name") or ""
+        value = " ".join(str(v) for v in (card.get("value") or []))
+        value = _strip_tags(value)
+        if name and value:
+            parts.append(f"{name}：{value}")
+
+    snippet = "；".join(p for p in parts if p)[:700]
+    if not snippet or not _relevant(term, title, snippet):
         return None
     return {
         "source": "Baidu Baike",
-        "title": term,
-        "snippet": text[:600],
-        "url": f"https://baike.baidu.com/item/{urllib.parse.quote(term)}",
-        "exact": True,
+        "title": title,
+        "snippet": snippet,
+        "url": f"https://baike.baidu.com/item/{urllib.parse.quote(title)}",
+        "exact": term in title,
     }
+
+
+def _strip_tags(text: str) -> str:
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", text)).split())
 
 
 # ---------------------------------------------------------------- Bing

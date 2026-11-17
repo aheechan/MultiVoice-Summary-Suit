@@ -419,6 +419,10 @@ class TrayApp(QSystemTrayIcon):
 
     def open_review(self) -> None:
         try:
+            if not glossary.load().pending:
+                self.showMessage(i18n.t("app_name"), i18n.t("nothing_pending"),
+                                 QSystemTrayIcon.MessageIcon.Information, 3000)
+                return
             self.review_dialog = ReviewDialog(self.cfg, self.panel)
             self.warm_review(6)
             self.review_dialog.exec()

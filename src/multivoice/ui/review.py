@@ -345,8 +345,6 @@ class ReviewDialog(QDialog):
         dropped: list[str] = []
         for entry in self.lex.pending:
             term = entry["term"]
-            if self.lex.is_rejected(term):
-                continue
             record = prefetch.cached(term)
             summary = ""
             titles: list[str] = []
@@ -651,5 +649,5 @@ class ReviewDialog(QDialog):
 
     def drop_selected(self) -> None:
         for term in self.selected_terms():
-            self.lex.reject(term)
+            self.lex.resolve_pending(term)
         self.reload()

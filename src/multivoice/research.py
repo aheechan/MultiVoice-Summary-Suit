@@ -144,8 +144,6 @@ def queue_candidates(
             continue
         if term in glossary.corrections:
             continue
-        if glossary.is_rejected(term):
-            continue
         snippet = ""
         if context:
             position = context.find(term)

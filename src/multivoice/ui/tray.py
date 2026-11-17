@@ -64,18 +64,22 @@ class Worker(QThread):
     progress = Signal(int, str)
 
     def __init__(self, source: Path, cfg: Config, stages: tuple[str, ...],
-                 stage: str, outputs: tuple[str, ...] = ("a", "b", "c")):
+                 stage: str, outputs: tuple[str, ...] = ("a", "b", "c"),
+                 resume: bool = True, cleanup: bool = False):
         super().__init__()
         self.source = source
         self.cfg = cfg
         self.stages = stages
         self.stage = stage
         self.outputs = outputs
+        self.resume = resume
+        self.cleanup = cleanup
 
     def run(self) -> None:  # noqa: D401
         try:
             out = pipeline.run(
                 self.source, self.cfg, stages=self.stages, outputs=self.outputs,
+                resume=self.resume, cleanup=self.cleanup,
                 on_progress=lambda value, key: self.progress.emit(value, key),
             )
             self.done.emit(str(out), self.stage, ",".join(self.outputs))
@@ -474,7 +478,8 @@ class TrayApp(QSystemTrayIcon):
         self.showMessage(i18n.t("app_name"), i18n.t("started", name=source.name),
                          QSystemTrayIcon.MessageIcon.Information, 3000)
 
-        self.worker = Worker(source, self.cfg, stages, stage, outputs)
+        self.worker = Worker(source, self.cfg, stages, stage, outputs,
+                             resume=(stage == "generate"), cleanup=False)
         self.worker.done.connect(self.on_done)
         self.worker.failed.connect(self.on_error)
         self.worker.progress.connect(self.on_progress)
@@ -630,6 +635,12 @@ class TrayApp(QSystemTrayIcon):
     def quit(self) -> None:
         if self.worker and self.worker.isRunning():
             self.worker.terminate()
+        try:
+            from .. import cache
+
+            cache.clean(self.cfg, None)  # no cache survives a session
+        except Exception:
+            pass
         QApplication.quit()
 
 
@@ -660,6 +671,13 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
     if not _acquire_instance_mutex():
         print("MultiVoice is already running. Use the tray icon to open it.")
         return 0
+
+    try:
+        from .. import cache
+
+        cache.clean(cfg, None)  # start every session with a clean slate
+    except Exception:
+        pass
 
     selftest = bool(os.environ.get("MVS_TRAY_SELFTEST"))
     if not selftest and not QSystemTrayIcon.isSystemTrayAvailable():

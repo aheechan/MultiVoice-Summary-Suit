@@ -115,6 +115,7 @@ def run(
     stages: tuple[str, ...] = ALL_STAGES,
     resume: bool = True,
     outputs: tuple[str, ...] = ("a", "b", "c", "d"),
+    cleanup: bool = False,
     on_progress=None,
 ) -> Path:
     source = Path(source)
@@ -304,5 +305,12 @@ def run(
         "updated": datetime.now().isoformat(timespec="seconds"),
     }
     _write(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    if cleanup:
+        # No persistent job cache: keep only the exported deliverables.
+        import shutil
+
+        shutil.rmtree(job, ignore_errors=True)
+
     report(100, "done")
     return out

@@ -95,8 +95,8 @@ def _probable_name(term: str) -> bool:
     return len(term.split()) >= 2 and len(term) >= 5
 
 
-def _try_correction(term: str, cfg: Config) -> str:
-    """If the model suggests a homophone/proper-noun fix that has evidence, adopt it."""
+def _suggest(term: str, cfg: Config) -> str:
+    """Model's contextual guess for a term, if any."""
     from . import glossary as glossary_module
     from . import research
 
@@ -108,14 +108,18 @@ def _try_correction(term: str, cfg: Config) -> str:
             break
     if not context:
         return ""
-
     suggestion = research.suggest_correction(term, context, cfg)
-    if not suggestion or suggestion == term:
-        return ""
-    if not sources.collect(suggestion):
-        return ""
+    return suggestion if suggestion and suggestion != term else ""
 
-    other = build(suggestion, cfg)  # one level of recursion
+
+def _try_correction(term: str, cfg: Config, suggestion: str) -> str:
+    """If the suggested spelling has real evidence, adopt it with an alias."""
+    from . import glossary as glossary_module
+
+    if not suggestion or not sources.collect(suggestion):
+        return ""
+    lex = glossary_module.load()
+    build(suggestion, cfg)  # one level of recursion
     lex = glossary_module.load()  # build() may have written a new entry
     entry = lex.find(suggestion)
     if entry is None:
@@ -133,24 +137,15 @@ def build(term: str, cfg: Config) -> dict | None:
 
     evidence = sources.collect(term)
     if not evidence:
-        # Try an in-context spelling correction before giving up.
-        corrected = _try_correction(term, cfg)
-        if corrected:
-            record = {
-                "zh": [], "en": [], "evidence": [],
-                "summary_zh": "", "summary_en": "",
-                "empty": True, "corrected_to": corrected,
-                "at": date.today().isoformat(),
-            }
-            data = _read_cache()
-            data[term] = record
-            _write_cache(data)
-            return record
-
+        suggestion = _suggest(term, cfg)
+        corrected = _try_correction(term, cfg, suggestion) if suggestion else ""
         record = {
             "zh": [], "en": [], "evidence": [],
             "summary_zh": "", "summary_en": "",
-            "empty": True, "at": date.today().isoformat(),
+            "empty": True,
+            "suggest": "" if corrected else suggestion,
+            "corrected_to": corrected,
+            "at": date.today().isoformat(),
         }
         data = _read_cache()
         data[term] = record

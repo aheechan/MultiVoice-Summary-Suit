@@ -22,6 +22,12 @@ def _today() -> str:
     return date.today().isoformat()
 
 
+def _now() -> str:
+    from datetime import datetime
+
+    return datetime.now().strftime("%H:%M")
+
+
 def _age_days(stamp: str) -> int:
     try:
         then = datetime.fromisoformat(stamp).date()
@@ -93,6 +99,7 @@ class Glossary:
                 item["count"] = item.get("count", 1) + 1
                 item["attempts"] = item.get("attempts", 1) + 1
                 item["last_seen"] = _today()
+                item["seen_at"] = _now()
                 item["reason"] = reason
                 self.save()
                 return
@@ -103,6 +110,7 @@ class Glossary:
             "reason": reason,
             "first_seen": _today(),
             "last_seen": _today(),
+            "seen_at": _now(),
         })
         self.save()
 

@@ -351,7 +351,12 @@ class ReviewDialog(QDialog):
             if record is None:
                 summary = i18n.t("not_fetched")
             elif record.get("empty"):
-                summary = i18n.t("no_result")
+                if record.get("corrected_to"):
+                    summary = i18n.t("auto_corrected", term=record["corrected_to"])
+                elif record.get("suggest"):
+                    summary = i18n.t("possible_term", term=record["suggest"])
+                else:
+                    summary = i18n.t("no_result")
             else:
                 summary = record.get("summary_zh" if language == "zh" else "summary_en") or ""
                 titles = record.get("zh" if language == "zh" else "en") or []
@@ -378,6 +383,13 @@ class ReviewDialog(QDialog):
             name.setFont(font)
             name.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             term_row.addWidget(name, 1)
+
+            stamp = entry.get("seen_at") or entry.get("first_seen", "")
+            if stamp:
+                when = QLabel(stamp)
+                when.setObjectName("titles")
+                when.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                term_row.addWidget(when)
             inner.addLayout(term_row)
 
             if summary:
@@ -461,10 +473,14 @@ class ReviewDialog(QDialog):
         self.reload()
 
     def fetch_missing(self) -> None:
-        """Search every pending term that has no cached summary yet."""
-        missing = [p["term"] for p in self.lex.pending if prefetch.cached(p["term"]) is None]
+        """Re-search every pending term without usable evidence (including empties)."""
+        missing: list[str] = []
+        for item in self.lex.pending:
+            record = prefetch.cached(item["term"])
+            if record is None or record.get("empty"):
+                missing.append(item["term"])
         if not missing:
-            self.status.setText(i18n.t("nothing_pending"))
+            self.status.setText(i18n.t("fetch_done", updated=0, empty=0))
             return
 
         progress = QProgressDialog(i18n.t("fetching"), "", 0, len(missing), self)

@@ -320,13 +320,36 @@ class LibraryDialog(QDialog):
         if not dialog.exec():
             return
         values = dialog.values()
+        old_term = entry["term"]
         if values["term"] and values["term"] != entry["term"]:
             entry["term"] = values["term"]
         for key in ("definition", "en", "category", "domain", "topic"):
             entry[key] = values[key]
         self.lex.save()
+        if old_term != entry["term"]:
+            self.lex.remember_correction(old_term, entry["term"])
+            self._sync_outputs(old_term, entry["term"])
         self._reload_data()
         self.status.setText(i18n.t("entry_updated"))
+
+    def _sync_outputs(self, old: str, new: str) -> None:
+        """Rewrite the newest export folder so a rename lands in the files too."""
+        try:
+            dirs = sorted(
+                (p for p in self.cfg.output.iterdir() if p.is_dir()),
+                key=lambda p: p.stat().st_mtime, reverse=True,
+            )
+        except OSError:
+            return
+        if not dirs:
+            return
+        for path in list(dirs[0].glob("*.md")) + list(dirs[0].glob("text/*.txt")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if old in text:
+                path.write_text(text.replace(old, new), encoding="utf-8")
 
     def delete_checked(self) -> None:
         terms = self.checked_terms() or ([self.current_term()] if self.current_term() else [])

@@ -102,6 +102,25 @@ def research_term(term: str, glossary: Glossary, cfg: Config) -> tuple[dict | No
     return entry, False
 
 
+def queue_candidates(
+    terms: list[str], glossary: Glossary, limit: int = 8, reason: str = "from-job"
+) -> list[str]:
+    """Queue unknown terms for human review instead of writing them silently."""
+    queued: list[str] = []
+    for term in terms:
+        if len(queued) >= limit:
+            break
+        if not looks_like_entity(term):
+            continue
+        if glossary.find(term) is not None:
+            continue
+        if any(item["term"] == term for item in glossary.pending):
+            continue
+        glossary.queue(term, reason=reason)
+        queued.append(term)
+    return queued
+
+
 def ensure_terms(
     terms: list[str], glossary: Glossary, cfg: Config, limit: int = 6
 ) -> list[dict]:

@@ -173,6 +173,7 @@ def run(
     glossary_text = "（无）"
     alias_changes: list = []
     researched: list = []
+    queued_terms: list = []
     already_corrected = bool(resume and fixed_json.exists())
     if "correct" in stages and not already_corrected:
         if resume and (job / "context.json").exists():
@@ -198,7 +199,9 @@ def run(
             candidates = list(context["terms"])
             candidates += [entry["term"] for entry in lex.match(head)]
             report(66, "research")
-            researched = research.ensure_terms(candidates, lex, cfg)
+            # Never write new terms silently: queue them for human review.
+            queued_terms = research.queue_candidates(candidates, lex)
+            researched = []
             glossary_text, _ = lex.context_for(head)
 
             # 3) encyclopedia facts for hard entities
@@ -212,7 +215,8 @@ def run(
                 "findings": findings,
                 "glossary": glossary_text,
                 "aliases": alias_changes,
-                "researched": [e["term"] for e in researched],
+                "researched": [e["term"] if isinstance(e, dict) else e for e in researched],
+        "queued_terms": queued_terms,
             }, ensure_ascii=False, indent=2))
             if findings:
                 _write(out / "verification.md", verify.to_markdown(findings))

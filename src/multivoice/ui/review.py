@@ -176,6 +176,74 @@ class TermEditDialog(QDialog):
         }
 
 
+class EvidenceDialog(QDialog):
+    """Show every collected source so the user can pick the one to trust."""
+
+    def __init__(self, term: str, evidence: list[dict], parent=None):
+        super().__init__(parent)
+        self.term = term
+        self.evidence = evidence
+        self.setWindowTitle(f"{i18n.t('view_sources')} · {term}")
+        self.resize(760, 560)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        hint = QLabel(i18n.t("choose_source"))
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        cards = QVBoxLayout(container)
+        cards.setSpacing(10)
+        self.group = QButtonGroup(self)
+
+        for index, item in enumerate(evidence):
+            frame = QFrame()
+            frame.setObjectName("card")
+            inner = QVBoxLayout(frame)
+            inner.setContentsMargins(12, 10, 12, 10)
+            inner.setSpacing(5)
+
+            radio = QRadioButton(f"{item['source']} · {item['title']}")
+            radio.setProperty("value", index)
+            self.group.addButton(radio, index)
+            if index == 0:
+                radio.setChecked(True)
+            inner.addWidget(radio)
+
+            snippet = QLabel(item["snippet"][:400])
+            snippet.setObjectName("summary")
+            snippet.setWordWrap(True)
+            inner.addWidget(snippet)
+
+            link = QLabel(f"<a href='{item['url']}'>{item['url']}</a>")
+            link.setObjectName("titles")
+            link.setOpenExternalLinks(True)
+            link.setWordWrap(True)
+            inner.addWidget(link)
+
+            cards.addWidget(frame)
+
+        cards.addStretch(1)
+        scroll.setWidget(container)
+        layout.addWidget(scroll, 1)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def chosen(self) -> dict | None:
+        button = self.group.checkedButton()
+        if button is None:
+            return None
+        return self.evidence[button.property("value")]
+
+
 class ReviewDialog(QDialog):
     def __init__(self, cfg, parent=None):
         super().__init__(parent)
@@ -316,6 +384,15 @@ class ReviewDialog(QDialog):
                 meta.setWordWrap(True)
                 inner.addWidget(meta)
 
+            evidence = (record or {}).get("evidence") or []
+            if evidence:
+                sources_button = QPushButton(f"{i18n.t('view_sources')} ({len(evidence)})")
+                sources_button.setMaximumWidth(150)
+                sources_button.clicked.connect(
+                    lambda _=False, t=term, ev=evidence: self.view_sources(t, ev)
+                )
+                inner.addWidget(sources_button)
+
             self.cards.addWidget(card)
 
         self.cards.addStretch(1)
@@ -347,6 +424,31 @@ class ReviewDialog(QDialog):
     def invert_selection(self) -> None:
         for box in self.checks.values():
             box.setChecked(not box.isChecked())
+
+    def view_sources(self, term: str, evidence: list[dict]) -> None:
+        """Let the user pick a source, then save the term with that definition."""
+        dialog = EvidenceDialog(term, evidence, self)
+        if not dialog.exec():
+            return
+        item = dialog.chosen()
+        if not item:
+            return
+        edit = TermEditDialog(term, item["snippet"][:400],
+                              list(self.lex.topics), self.cfg, self)
+        if not edit.exec():
+            return
+        values = edit.values()
+        self.lex.add(
+            values["term"],
+            definition=values["definition"],
+            en=values["en"],
+            category=values["category"],
+            domain=values["domain"],
+            confidence="high",
+            sources=[item["url"]],
+        )
+        self.lex.resolve_pending(term)
+        self.reload()
 
     def fetch_missing(self) -> None:
         """Search every pending term that has no cached summary yet."""

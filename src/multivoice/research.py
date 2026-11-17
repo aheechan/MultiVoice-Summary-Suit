@@ -114,6 +114,8 @@ def queue_candidates(
             continue
         if glossary.find(term) is not None:
             continue
+        if any(term in entry.get("aliases", []) for entry in glossary.entries):
+            continue
         if any(item["term"] == term for item in glossary.pending):
             continue
         glossary.queue(term, reason=reason)

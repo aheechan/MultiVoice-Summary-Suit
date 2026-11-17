@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 
-from . import search
+from . import search, sources
 from .config import Config, PROJECT_ROOT
 from .glossary import Glossary, DEFAULT_PATH
 from .llm import chat
@@ -64,32 +64,73 @@ def _summary(term: str, cfg: Config, zh: list[dict], en: list[dict]) -> tuple[st
         return "", ""
 
 
-def build(term: str, cfg: Config) -> dict | None:
-    """Search zh and en in parallel, then produce a synchronized bilingual summary."""
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        zh_future = pool.submit(search.bing, term, 4, "zh")
-        en_future = pool.submit(search.bing, term, 4, "en")
-        zh = zh_future.result()
-        en = en_future.result()
+def _summary_from_evidence(term: str, cfg: Config, evidence: list[dict]) -> tuple[str, str]:
+    template = PROMPT.read_text(encoding="utf-8")
+    zh_lines, en_lines = [], []
+    for item in evidence:
+        line = f"[{item['source']}] {item['title']}: {item['snippet'][:400]}"
+        if "en" in item["source"].lower():
+            en_lines.append(line)
+        else:
+            zh_lines.append(line)
+    prompt = (
+        template.replace("{{TERM}}", term)
+        .replace("{{ZH}}", "\n".join(zh_lines) or "（无）")
+        .replace("{{EN}}", "\n".join(en_lines) or "（无）")
+    )
+    try:
+        answer = chat([{"role": "user", "content": prompt}], cfg,
+                      temperature=0.0, max_tokens=600)
+        start, end = answer.find("{"), answer.rfind("}")
+        data = json.loads(answer[start:end + 1])
+        return data.get("zh", "").strip(), data.get("en", "").strip()
+    except Exception:
+        return "", ""
 
-    if zh is None and en is None:
+
+def _probable_name(term: str) -> bool:
+    """Short or generic strings (朱志, Harness, V4) must never be auto-imported."""
+    if any("\u4e00" <= char <= "\u9fff" for char in term):
+        return len(term) >= 3
+    return len(term.split()) >= 2 and len(term) >= 5
+
+
+def build(term: str, cfg: Config) -> dict | None:
+    """Collect multi-source evidence, summarise it, and auto-save exact matches."""
+    from . import glossary as glossary_module
+
+    evidence = sources.collect(term)
+    if not evidence:
         return None  # network failure: keep the term, learn nothing
 
-    zh = zh or []
-    en = en or []
-    if not zh and not en:
-        return {"zh": [], "en": [], "summary_zh": "", "summary_en": "",
-                "empty": True, "at": date.today().isoformat()}
-
-    summary_zh, summary_en = _summary(term, cfg, zh, en)
+    summary_zh, summary_en = _summary_from_evidence(term, cfg, evidence)
     record = {
-        "zh": [item["title"] for item in zh[:3]],
-        "en": [item["title"] for item in en[:3]],
+        "zh": [item["title"] for item in evidence if "zh" in item["source"].lower()][:3],
+        "en": [item["title"] for item in evidence if "en" in item["source"].lower()][:3],
+        "evidence": evidence,
         "summary_zh": summary_zh,
         "summary_en": summary_en,
         "empty": False,
         "at": date.today().isoformat(),
     }
+
+    exact = sources.has_exact(evidence)
+    if exact and exact["source"].startswith("Wikipedia") and _probable_name(term):
+        lex = glossary_module.load()
+        if lex.find(term) is None:
+            lex.add(
+                term,
+                definition=exact["snippet"][:400],
+                en=summary_en,
+                category="other",
+                domain="other",
+                confidence="high",
+                sources=[exact["url"]],
+                auto=True,
+            )
+            lex.resolve_pending(term)
+            record["auto_entry"] = True
+
     data = _read_cache()
     data[term] = record
     _write_cache(data)

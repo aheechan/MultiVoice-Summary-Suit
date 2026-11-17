@@ -533,20 +533,26 @@ class ReviewDialog(QDialog):
         return super().eventFilter(obj, event)
 
     def _sync_script(self, old: str, new: str) -> None:
-        """Keep the generated clean script in sync after a term correction."""
+        """Rewrite every deliverable of the latest job after a term correction."""
         try:
-            paths = sorted(self.cfg.output.glob("*/a-script.md"),
-                           key=lambda p: p.stat().st_mtime, reverse=True)
+            dirs = sorted(
+                (p for p in self.cfg.output.iterdir() if p.is_dir()),
+                key=lambda p: p.stat().st_mtime, reverse=True,
+            )
         except OSError:
             return
-        for path in paths[:5]:
+        if not dirs:
+            return
+
+        latest = dirs[0]
+        targets = list(latest.glob("*.md")) + list(latest.glob("text/*.txt"))
+        for path in targets:
             try:
                 text = path.read_text(encoding="utf-8")
             except OSError:
                 continue
             if old in text:
                 path.write_text(text.replace(old, new), encoding="utf-8")
-                break
 
     def fix_term(self) -> None:
         """Correct a mis-recognised term, then search again with the new spelling."""

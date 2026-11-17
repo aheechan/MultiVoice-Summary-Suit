@@ -477,7 +477,14 @@ class TrayApp(QSystemTrayIcon):
                 return
 
         self.last_source = source
-        self.panel_status = i18n.t("status_working", name=source.name)
+        if stage == "transcribe":
+            # A new recording starts a fresh review round.
+            lex = glossary.load()
+            lex.pending = []
+            lex.save()
+            self.panel_status = i18n.t("status_working", name=source.name)
+        else:
+            self.panel_status = i18n.t("status_working", name=source.name)
         self.action_status.setText(self.panel_status)
         self.showMessage(i18n.t("app_name"), i18n.t("started", name=source.name),
                          QSystemTrayIcon.MessageIcon.Information, 3000)

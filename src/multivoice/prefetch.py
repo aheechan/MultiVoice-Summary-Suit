@@ -95,8 +95,32 @@ def _probable_name(term: str) -> bool:
     return len(term.split()) >= 2 and len(term) >= 5
 
 
+def _similar_known(term: str, lex) -> str:
+    """Find a near-identical known term (same length, mostly same characters)."""
+    candidates = [entry["term"] for entry in lex.entries]
+    candidates += [item["term"] for item in lex.pending if item["term"] != term]
+    best, best_score = "", 0.0
+    for candidate in candidates:
+        if len(candidate) != len(term) or candidate == term:
+            continue
+        score = sum(1 for a, b in zip(term, candidate) if a == b) / len(term)
+        if score > best_score:
+            best, best_score = candidate, score
+    return best if best_score >= 0.6 else ""
+
+
+PLACE_SUFFIX = ("村", "镇", "县", "市", "省", "区", "遗址", "寺", "山", "河", "湖")
+
+
+def _same_kind(term: str, candidate: str) -> bool:
+    """Place names must stay place names; bare names are never auto-corrected."""
+    if term.endswith(PLACE_SUFFIX):
+        return candidate.endswith(PLACE_SUFFIX)
+    return False
+
+
 def _suggest(term: str, cfg: Config) -> str:
-    """Model's contextual guess for a term, if any."""
+    """Contextual guess first, then a local near-identical term match."""
     from . import glossary as glossary_module
     from . import research
 
@@ -106,10 +130,38 @@ def _suggest(term: str, cfg: Config) -> str:
         if item["term"] == term:
             context = item.get("context", "")
             break
-    if not context:
+
+    similar = _similar_known(term, lex)
+    if similar and sources.collect(similar):
+        return similar
+
+    if context:
+        suggestion = research.suggest_correction(term, context, cfg)
+        if suggestion and suggestion != term and sources.collect(suggestion):
+            return suggestion
         return ""
-    suggestion = research.suggest_correction(term, context, cfg)
-    return suggestion if suggestion and suggestion != term else ""
+
+    # No context stored: still ask the model for a likely homophone, but only
+    # auto-adopt it when both spellings are clearly the same kind of place name.
+    suggestion = research.suggest_correction(term, "", cfg)
+    if suggestion and suggestion != term and _same_kind(term, suggestion) \
+            and sources.collect(suggestion):
+        return suggestion
+    return ""
+
+
+def _llm_suggestion(term: str, cfg: Config) -> str:
+    """Raw model guess, shown to the user even when it is not auto-adopted."""
+    from . import glossary as glossary_module
+    from . import research
+
+    lex = glossary_module.load()
+    context = ""
+    for item in lex.pending:
+        if item["term"] == term:
+            context = item.get("context", "")
+            break
+    return research.suggest_correction(term, context, cfg)
 
 
 def _try_correction(term: str, cfg: Config, suggestion: str) -> str:
@@ -139,6 +191,8 @@ def build(term: str, cfg: Config) -> dict | None:
     if not evidence:
         suggestion = _suggest(term, cfg)
         corrected = _try_correction(term, cfg, suggestion) if suggestion else ""
+        if not corrected:
+            suggestion = _llm_suggestion(term, cfg)
         record = {
             "zh": [], "en": [], "evidence": [],
             "summary_zh": "", "summary_en": "",

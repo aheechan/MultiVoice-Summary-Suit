@@ -162,16 +162,23 @@ def suggest_correction(term: str, context: str, cfg: Config) -> str:
     """Ask the model whether a term is a mis-recognition of a similar name."""
     if cfg is None:
         return ""
-    try:
-        answer = chat(
-            [{"role": "user", "content":
-              "下面是一段转写文本的片段，其中出现了词条「" + term + "」。\n"
-              f"上下文：{context}\n\n"
-              "请判断这个词条是否很可能是另一个相近词（人名、地名、专有名词）的误识别。"
-              "如果很可能写错了，只输出正确写法；如果识别无误，原样输出该词条。"
-              "不要解释，不要标点。"}],
-            cfg, temperature=0.0, max_tokens=32,
+    if context:
+        body = (
+            "下面是一段转写文本的片段，其中出现了词条「" + term + "」。\n"
+            f"上下文：{context}\n\n"
+            "请判断这个词条是否很可能是另一个相近词（人名、地名、专有名词）的误识别。"
+            "如果很可能写错了，只输出正确写法；如果识别无误，原样输出该词条。"
+            "不要解释，不要标点。"
         )
+    else:
+        body = (
+            f"「{term}」来自一段中文音频转写，可能是同音字或近音字写错。"
+            "如果你确信存在更常见的正确写法（人名、地名、专有名词），只输出那个写法；"
+            "否则原样输出该词条。不要解释，不要标点。"
+        )
+    try:
+        answer = chat([{"role": "user", "content": body}], cfg,
+                      temperature=0.0, max_tokens=32)
         candidate = answer.strip().strip("。.,，")
         return candidate if candidate and candidate != term else ""
     except Exception:

@@ -8,7 +8,7 @@ import tempfile
 import urllib.parse
 from pathlib import Path
 
-from . import bgm, config, ingest, pipeline, vad
+from . import bgm, cache, config, ingest, pipeline, vad
 
 
 def _ok(label: str, value: str) -> None:
@@ -209,6 +209,11 @@ def main(argv: list[str] | None = None) -> int:
         "--outputs", default="a,b,c,d", help="comma separated: a,b,c,d"
     )
 
+    cache_parser = sub.add_parser("cache", help="inspect or clean the job cache")
+    cache_parser.add_argument("--days", type=int, default=30)
+    cache_parser.add_argument("--all", action="store_true")
+    cache_parser.add_argument("--stats", action="store_true")
+
     args = parser.parse_args(argv)
     cfg = config.load(args.config_dir)
 
@@ -226,6 +231,17 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "glossary":
         return glossary_command(args, cfg)
+
+    if args.command == "cache":
+        if args.stats:
+            info = cache.stats(cfg)
+            info["oldest"] = str(info["oldest"]) if info["oldest"] else None
+            info["newest"] = str(info["newest"]) if info["newest"] else None
+            print(json.dumps(info, ensure_ascii=False, indent=2))
+            return 0
+        result = cache.clean(cfg, None if args.all else args.days)
+        print(f"removed {result['removed']} job(s), freed {result['bytes'] / 1e6:.1f} MB")
+        return 0
 
     if args.command == "discover":
         from . import discover, glossary

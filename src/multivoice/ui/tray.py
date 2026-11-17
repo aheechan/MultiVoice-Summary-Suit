@@ -293,6 +293,9 @@ class TrayApp(QSystemTrayIcon):
         self.action_settings = QAction(i18n.t("settings"), self)
         self.action_settings.triggered.connect(self.show_settings)
 
+        self.action_cache = QAction(i18n.t("clean_cache"), self)
+        self.action_cache.triggered.connect(self.clean_cache)
+
         self.provider_menu = QMenu(i18n.t("providers"), self.menu)
         active = (self.cfg.llm.get("order") or [""])[0]
         for item in self.cfg.llm.get("providers", []):
@@ -337,6 +340,7 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addSeparator()
         self.menu.addMenu(self.provider_menu)
         self.menu.addAction(self.action_settings)
+        self.menu.addAction(self.action_cache)
         self.menu.addAction(self.action_language)
         self.menu.addAction(self.action_about)
         self.menu.addSeparator()
@@ -539,6 +543,17 @@ class TrayApp(QSystemTrayIcon):
         self.showMessage(i18n.t("app_name"), i18n.t("job_cancelled"),
                          QSystemTrayIcon.MessageIcon.Information, 4000)
         self._refresh()
+
+    def clean_cache(self) -> None:
+        from .. import cache
+
+        result = cache.clean(self.cfg, 30)
+        self.showMessage(
+            i18n.t("app_name"),
+            i18n.t("cache_clean_done", n=result["removed"],
+                   mb=round(result["bytes"] / 1e6, 1)),
+            QSystemTrayIcon.MessageIcon.Information, 5000,
+        )
 
     def open_output(self, kind: str) -> None:
         path = self._output_path(kind)

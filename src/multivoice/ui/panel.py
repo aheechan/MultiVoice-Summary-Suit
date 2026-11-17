@@ -166,7 +166,7 @@ class Panel(QWidget):
         root.addWidget(self.next_step)
 
         self.output_buttons = {}
-        for kind in ("d", "b", "c"):
+        for kind in ("a", "d", "b", "c"):
             button = QPushButton()
             button.setMinimumHeight(52)
             button.setEnabled(False)
@@ -236,6 +236,7 @@ class Panel(QWidget):
         self.btn_transcribe.setText(i18n.t("transcribe"))
         self.btn_url.setText(i18n.t("from_url"))
         for kind, label, desc in (
+            ("a", "gen_a", "gen_a_desc"),
             ("d", "gen_expand", "gen_expand_desc"),
             ("b", "gen_b", "gen_b_desc"),
             ("c", "gen_c", "gen_c_desc"),

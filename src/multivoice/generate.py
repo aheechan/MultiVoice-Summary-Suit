@@ -65,7 +65,8 @@ def brief(units: list[dict], cfg: Config, transcript: str = "") -> str:
     return _guard(answer, transcript or payload, ratio=1.0) or _fallback_brief(units)
 
 
-def expand_draft(segments: list[Segment], units: list[dict], cfg: Config) -> str:
+def expand_draft(segments: list[Segment], units: list[dict], cfg: Config,
+                 glossary_text: str = "") -> str:
     """Rewrite the script with background added for non-common-sense points."""
     body = "\n".join(seg.text for seg in segments)
     payload = json.dumps(units, ensure_ascii=False, indent=2)
@@ -73,6 +74,16 @@ def expand_draft(segments: list[Segment], units: list[dict], cfg: Config) -> str
         _prompt("expand.zh.txt")
         .replace("{{TEXT}}", body)
         .replace("{{UNITS}}", payload)
+        .replace("{{GLOSSARY}}", glossary_text or "（无）")
     )
-    answer = chat([{"role": "user", "content": prompt}], cfg, max_tokens=8000)
-    return _guard(answer, body, ratio=2.08) or body.strip()
+    answer = chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
+    target = max(800, int(len(body) * 2.6))
+    if len(answer) > int(target * 1.2):
+        # The model tends to over-write; condense once to the intended length.
+        answer = chat(
+            [{"role": "user", "content":
+              f"把下面这篇稿件压缩到约 {target} 字，保留所有背景说明和专有名词解释，"
+              "删除重复、空话和铺陈。只输出压缩后的正文。\n\n" + answer}],
+            cfg, max_tokens=8000,
+        )
+    return _guard(answer, body, ratio=3.0, floor=int(target * 1.6)) or body.strip()

@@ -258,6 +258,7 @@ class TrayApp(QSystemTrayIcon):
 
         self.action_generators: dict[str, QAction] = {}
         for kind, label, desc in (
+            ("a", "gen_a", "gen_a_desc"),
             ("d", "gen_expand", "gen_expand_desc"),
             ("b", "gen_b", "gen_b_desc"),
             ("c", "gen_c", "gen_c_desc"),
@@ -323,7 +324,7 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addAction(self.action_run)
         self.menu.addAction(self.action_url)
         self.menu.addSeparator()
-        for kind in ("d", "b", "c"):
+        for kind in ("a", "d", "b", "c"):
             self.menu.addAction(self.action_generators[kind])
         self.menu.addSeparator()
         self.menu.addAction(self.action_status)

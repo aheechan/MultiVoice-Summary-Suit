@@ -270,8 +270,9 @@ def run(
         if "a" in outputs:
             _write(out / "a-script.md", generate.clean_script(segments, cfg))
         if "d" in outputs:
+            glossary_text, _ = lex.context_for(transcript_text)
             _write(out / "d-expand.md",
-                   generate.expand_draft(segments, units or [], cfg))
+                   generate.expand_draft(segments, units or [], cfg, glossary_text))
         if units and "b" in outputs:
             _write(out / "b-report.md", generate.report(units, cfg, transcript_text))
         if units and "c" in outputs:

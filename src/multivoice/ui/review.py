@@ -275,11 +275,14 @@ class ReviewDialog(QDialog):
         self.btn_fix.clicked.connect(self.fix_term)
         self.btn_fetch = QPushButton(i18n.t("fetch_missing"))
         self.btn_fetch.clicked.connect(self.fetch_missing)
+        self.btn_manage = QPushButton(i18n.t("manage_terms"))
+        self.btn_manage.clicked.connect(self.open_library)
         tools.addWidget(self.btn_all)
         tools.addWidget(self.btn_invert)
         tools.addWidget(self.btn_fix)
         tools.addWidget(self.btn_fetch)
         tools.addStretch(1)
+        tools.addWidget(self.btn_manage)
         layout.addLayout(tools)
 
         self.scroll = QScrollArea()
@@ -474,6 +477,13 @@ class ReviewDialog(QDialog):
             sources=[item["url"]],
         )
         self.lex.resolve_pending(term)
+        self.reload()
+
+    def open_library(self) -> None:
+        from .library import LibraryDialog
+
+        LibraryDialog(self.cfg, self).exec()
+        self.lex = glossary.load()
         self.reload()
 
     def fetch_missing(self) -> None:

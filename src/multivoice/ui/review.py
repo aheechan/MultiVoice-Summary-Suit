@@ -345,6 +345,8 @@ class ReviewDialog(QDialog):
         dropped: list[str] = []
         for entry in self.lex.pending:
             term = entry["term"]
+            if self.lex.is_rejected(term):
+                continue
             record = prefetch.cached(term)
             summary = ""
             titles: list[str] = []
@@ -386,7 +388,7 @@ class ReviewDialog(QDialog):
             name.installEventFilter(self)
             term_row.addWidget(name, 1)
 
-            stamp = entry.get("seen_at") or entry.get("first_seen", "")
+            stamp = entry.get("video_at") or entry.get("seen_at") or entry.get("first_seen", "")
             origin = entry.get("source", "")
             if stamp or origin:
                 label_text = stamp
@@ -649,5 +651,5 @@ class ReviewDialog(QDialog):
 
     def drop_selected(self) -> None:
         for term in self.selected_terms():
-            self.lex.resolve_pending(term)
+            self.lex.reject(term)
         self.reload()

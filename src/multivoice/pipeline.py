@@ -208,9 +208,16 @@ def run(
             candidates += [entry["term"] for entry in lex.match(head)]
             report(66, "research")
             # Never write new terms silently: queue them for human review.
+            positions: dict[str, str] = {}
+            for segment in segments:
+                for term in candidates:
+                    if term not in positions and term in segment.text:
+                        start = int(getattr(segment, "start", 0) or 0)
+                        positions[term] = f"{start // 60:02d}:{start % 60:02d}"
             queued_terms = research.queue_candidates(
                 research.triage(candidates, cfg, head), lex,
                 context=head, source=Path(source).stem[:8], when=started_at,
+                positions=positions,
             )
             researched = []
             glossary_text, _ = lex.context_for(head)

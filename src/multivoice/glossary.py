@@ -44,10 +44,12 @@ class Glossary:
         self.topics_path = self.path.with_name("topics.json")
         self.pending_path = self.path.with_name("pending.jsonl")
         self.corrections_path = self.path.with_name("corrections.json")
+        self.rejected_path = self.path.with_name("rejected.json")
         self.entries: list[dict] = []
         self.topics: dict[str, str] = {}
         self.pending: list[dict] = []
         self.corrections: dict[str, str] = {}
+        self.rejected: set[str] = set()
         self.load()
 
     # ------------------------------------------------------------------ storage
@@ -90,6 +92,15 @@ class Glossary:
             except json.JSONDecodeError:
                 self.corrections = {}
 
+        self.rejected = set()
+        if self.rejected_path.exists():
+            try:
+                self.rejected = set(
+                    json.loads(self.rejected_path.read_text(encoding="utf-8"))
+                )
+            except json.JSONDecodeError:
+                self.rejected = set()
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("w", encoding="utf-8") as handle:
@@ -104,12 +115,25 @@ class Glossary:
         self.corrections_path.write_text(
             json.dumps(self.corrections, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        self.rejected_path.write_text(
+            json.dumps(sorted(self.rejected), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def remember_correction(self, wrong: str, right: str) -> None:
         """Persist a mishearing fix so the wrong spelling never queues again."""
         if wrong and right and wrong != right:
             self.corrections[wrong] = right
             self.save()
+
+    def reject(self, term: str) -> None:
+        """Mark a term as not worth keeping; never queue or import it again."""
+        if term:
+            self.rejected.add(term)
+            self.pending = [item for item in self.pending if item["term"] != term]
+            self.save()
+
+    def is_rejected(self, term: str) -> bool:
+        return term in self.rejected
 
     # ------------------------------------------------------------------ pending
     def queue(self, term: str, reason: str = "unverified") -> None:

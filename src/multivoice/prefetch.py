@@ -215,6 +215,9 @@ def build(term: str, cfg: Config) -> dict | None:
     """Collect multi-source evidence, summarise it, and auto-save exact matches."""
     from . import glossary as glossary_module
 
+    if glossary_module.load().is_rejected(term):
+        return None
+
     evidence = sources.collect(term)
     exact = sources.has_exact(evidence) if evidence else None
 

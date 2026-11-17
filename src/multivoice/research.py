@@ -129,6 +129,7 @@ def triage(terms: list[str], cfg: Config, context: str = "") -> list[str]:
 def queue_candidates(
     terms: list[str], glossary: Glossary, limit: int = 8,
     reason: str = "from-job", context: str = "", source: str = "", when: str = "",
+    positions: dict[str, str] | None = None,
 ) -> list[str]:
     """Queue unknown terms for human review instead of writing them silently."""
     queued: list[str] = []
@@ -143,6 +144,8 @@ def queue_candidates(
             continue
         if term in glossary.corrections:
             continue
+        if glossary.is_rejected(term):
+            continue
         snippet = ""
         if context:
             position = context.find(term)
@@ -150,7 +153,7 @@ def queue_candidates(
                 snippet = context[max(0, position - 60):position + len(term) + 60]
         already = any(item["term"] == term for item in glossary.pending)
         glossary.queue(term, reason=reason)
-        if snippet or source or when:
+        if snippet or source or when or positions:
             for item in glossary.pending:
                 if item["term"] == term:
                     if snippet:
@@ -160,6 +163,8 @@ def queue_candidates(
                     if when:
                         # Reflect the job that most recently mentioned it.
                         item["seen_at"] = when
+                    if positions and term in positions:
+                        item["video_at"] = positions[term]
             glossary.save()
         if already:
             continue

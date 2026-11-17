@@ -141,13 +141,12 @@ def queue_candidates(
             continue
         if any(term in entry.get("aliases", []) for entry in glossary.entries):
             continue
-        if any(item["term"] == term for item in glossary.pending):
-            continue
         snippet = ""
         if context:
             position = context.find(term)
             if position >= 0:
                 snippet = context[max(0, position - 60):position + len(term) + 60]
+        already = any(item["term"] == term for item in glossary.pending)
         glossary.queue(term, reason=reason)
         if snippet or source or when:
             for item in glossary.pending:
@@ -157,8 +156,11 @@ def queue_candidates(
                     if source:
                         item["source"] = source
                     if when:
+                        # Reflect the job that most recently mentioned it.
                         item["seen_at"] = when
             glossary.save()
+        if already:
+            continue
         queued.append(term)
     return queued
 

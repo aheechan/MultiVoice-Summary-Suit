@@ -410,7 +410,7 @@ class TrayApp(QSystemTrayIcon):
     def open_review(self) -> None:
         try:
             self.review_dialog = ReviewDialog(self.cfg, self.panel)
-            self.warm_review(3)
+            self.warm_review(6)
             self.review_dialog.exec()
             self.review_dialog = None
             self._refresh()

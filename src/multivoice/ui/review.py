@@ -205,9 +205,12 @@ class ReviewDialog(QDialog):
         self.btn_invert.clicked.connect(self.invert_selection)
         self.btn_fix = QPushButton(i18n.t("fix_term"))
         self.btn_fix.clicked.connect(self.fix_term)
+        self.btn_fetch = QPushButton(i18n.t("fetch_missing"))
+        self.btn_fetch.clicked.connect(self.fetch_missing)
         tools.addWidget(self.btn_all)
         tools.addWidget(self.btn_invert)
         tools.addWidget(self.btn_fix)
+        tools.addWidget(self.btn_fetch)
         tools.addStretch(1)
         layout.addLayout(tools)
 
@@ -278,7 +281,7 @@ class ReviewDialog(QDialog):
             summary = ""
             titles: list[str] = []
             if record is None:
-                summary = "…"
+                summary = i18n.t("not_fetched")
             elif record.get("empty"):
                 dropped.append(term)
                 continue
@@ -345,6 +348,31 @@ class ReviewDialog(QDialog):
     def invert_selection(self) -> None:
         for box in self.checks.values():
             box.setChecked(not box.isChecked())
+
+    def fetch_missing(self) -> None:
+        """Search every pending term that has no cached summary yet."""
+        missing = [p["term"] for p in self.lex.pending if prefetch.cached(p["term"]) is None]
+        if not missing:
+            self.status.setText(i18n.t("nothing_pending"))
+            return
+
+        progress = QProgressDialog(i18n.t("fetching"), "", 0, len(missing), self)
+        progress.setWindowTitle(i18n.t("fetch_missing"))
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        QApplication.processEvents()
+
+        for index, term in enumerate(missing, 1):
+            progress.setLabelText(f"{term}  ({index}/{len(missing)})")
+            QApplication.processEvents()
+            prefetch.build(term, self.cfg)
+            progress.setValue(index)
+            QApplication.processEvents()
+
+        progress.close()
+        self.reload()
 
     def fix_term(self) -> None:
         """Correct a mis-recognised term, then search again with the new spelling."""

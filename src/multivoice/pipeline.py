@@ -114,7 +114,7 @@ def run(
     language: str = "auto",
     stages: tuple[str, ...] = ALL_STAGES,
     resume: bool = True,
-    outputs: tuple[str, ...] = ("a", "b", "c"),
+    outputs: tuple[str, ...] = ("a", "b", "c", "d"),
     on_progress=None,
 ) -> Path:
     source = Path(source)
@@ -281,14 +281,14 @@ def run(
         transcript_text = "\n".join(seg.text for seg in segments)
         if "a" in outputs:
             _write(out / "a-script.md", generate.clean_script(segments, cfg))
-        if "d" in outputs:
+        if "b" in outputs:
             glossary_text, _ = lex.context_for(transcript_text)
-            _write(out / "d-expand.md",
+            _write(out / "b-expand.md",
                    generate.expand_draft(segments, units or [], cfg, glossary_text))
-        if units and "b" in outputs:
-            _write(out / "b-report.md", generate.report(units, cfg, transcript_text))
         if units and "c" in outputs:
-            _write(out / "c-brief.md", generate.brief(units, cfg, transcript_text))
+            _write(out / "c-report.md", generate.report(units, cfg, transcript_text))
+        if units and "d" in outputs:
+            _write(out / "d-brief.md", generate.brief(units, cfg, transcript_text))
 
     manifest = {
         "source": str(source),

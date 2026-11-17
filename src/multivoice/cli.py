@@ -206,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         "--no-resume", action="store_true", help="ignore cached job artifacts"
     )
     run_parser.add_argument(
-        "--outputs", default="a,b,c", help="comma separated: a,b,c"
+        "--outputs", default="a,b,c,d", help="comma separated: a,b,c,d"
     )
 
     args = parser.parse_args(argv)

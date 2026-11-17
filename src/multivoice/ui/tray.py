@@ -259,9 +259,9 @@ class TrayApp(QSystemTrayIcon):
         self.action_generators: dict[str, QAction] = {}
         for kind, label, desc in (
             ("a", "gen_a", "gen_a_desc"),
-            ("d", "gen_expand", "gen_expand_desc"),
-            ("b", "gen_b", "gen_b_desc"),
-            ("c", "gen_c", "gen_c_desc"),
+            ("b", "gen_expand", "gen_expand_desc"),
+            ("c", "gen_report", "gen_b_desc"),
+            ("d", "gen_brief", "gen_c_desc"),
         ):
             action = QAction(f"{i18n.t(label)} — {i18n.t(desc)}", self)
             action.triggered.connect(lambda _=False, k=kind: self.generate_outputs(k))
@@ -324,7 +324,7 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addAction(self.action_run)
         self.menu.addAction(self.action_url)
         self.menu.addSeparator()
-        for kind in ("a", "d", "b", "c"):
+        for kind in ("a", "b", "c", "d"):
             self.menu.addAction(self.action_generators[kind])
         self.menu.addSeparator()
         self.menu.addAction(self.action_status)
@@ -378,8 +378,8 @@ class TrayApp(QSystemTrayIcon):
         if not out or not out.exists():
             return None
         if kind in ("a", "b", "c", "d"):
-            names = {"a": "a-script.md", "b": "b-report.md",
-                     "c": "c-brief.md", "d": "d-expand.md"}
+            names = {"a": "a-script.md", "b": "b-expand.md",
+                     "c": "c-report.md", "d": "d-brief.md"}
             path = out / names[kind]
             return path if path.exists() else None
         text_dir = out / "text"
@@ -497,8 +497,8 @@ class TrayApp(QSystemTrayIcon):
                              QSystemTrayIcon.MessageIcon.Information, 8000)
         else:
             self.outputs_ready = True
-            labels = {"a": "gen_a", "b": "gen_b", "c": "gen_c", "d": "gen_expand"}
-            kind_label = i18n.t(labels.get(kinds.split(",")[0], "gen_expand"))
+            labels = {"a": "gen_a", "b": "gen_expand", "c": "gen_report", "d": "gen_brief"}
+            kind_label = i18n.t(labels.get(kinds.split(",")[0], "gen_a"))
             self.panel_status = i18n.t("status_outputs")
             self.action_status.setText(self.panel_status)
             self.showMessage(i18n.t("app_name"),

@@ -77,8 +77,9 @@ class PipelineTests(unittest.TestCase):
     def test_full_run_creates_outputs(self):
         out = pipeline.run(self.src, self.cfg)
         self.assertTrue((out / "a-script.md").exists())
-        self.assertTrue((out / "b-report.md").exists())
-        self.assertTrue((out / "c-brief.md").exists())
+        self.assertTrue((out / "b-expand.md").exists())
+        self.assertTrue((out / "c-report.md").exists())
+        self.assertTrue((out / "d-brief.md").exists())
         self.assertTrue((out / "text" / "original.txt").exists())
         self.assertTrue((out / "text" / "translated.en.txt").exists())
         self.assertTrue((out / "text" / "bilingual.zh-en.txt").exists())

@@ -205,6 +205,7 @@ def _try_correction(term: str, cfg: Config, suggestion: str) -> str:
     old = lex.find(term)
     if old is not None and old.get("auto"):
         lex.entries = [e for e in lex.entries if e["term"] != term]
+    lex.remember_correction(term, suggestion)
     lex.resolve_pending(term)
     lex.save()
     return suggestion

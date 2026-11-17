@@ -43,9 +43,11 @@ class Glossary:
         self.path = Path(path or DEFAULT_PATH)
         self.topics_path = self.path.with_name("topics.json")
         self.pending_path = self.path.with_name("pending.jsonl")
+        self.corrections_path = self.path.with_name("corrections.json")
         self.entries: list[dict] = []
         self.topics: dict[str, str] = {}
         self.pending: list[dict] = []
+        self.corrections: dict[str, str] = {}
         self.load()
 
     # ------------------------------------------------------------------ storage
@@ -79,6 +81,15 @@ class Glossary:
                     except json.JSONDecodeError:
                         continue
 
+        self.corrections = {}
+        if self.corrections_path.exists():
+            try:
+                self.corrections = json.loads(
+                    self.corrections_path.read_text(encoding="utf-8")
+                )
+            except json.JSONDecodeError:
+                self.corrections = {}
+
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("w", encoding="utf-8") as handle:
@@ -90,6 +101,15 @@ class Glossary:
         with self.pending_path.open("w", encoding="utf-8") as handle:
             for item in self.pending:
                 handle.write(json.dumps(item, ensure_ascii=False) + "\n")
+        self.corrections_path.write_text(
+            json.dumps(self.corrections, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    def remember_correction(self, wrong: str, right: str) -> None:
+        """Persist a mishearing fix so the wrong spelling never queues again."""
+        if wrong and right and wrong != right:
+            self.corrections[wrong] = right
+            self.save()
 
     # ------------------------------------------------------------------ pending
     def queue(self, term: str, reason: str = "unverified") -> None:
@@ -266,6 +286,9 @@ class Glossary:
             for alias in entry.get("aliases", []):
                 if alias and alias != entry["term"] and alias in text:
                     mapping.append((alias, entry["term"]))
+        for wrong, right in self.corrections.items():
+            if wrong and wrong in text and wrong != right:
+                mapping.append((wrong, right))
         mapping.sort(key=lambda pair: len(pair[0]), reverse=True)
 
         changes: list[tuple[str, str]] = []

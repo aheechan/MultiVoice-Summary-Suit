@@ -574,6 +574,7 @@ class ReviewDialog(QDialog):
             if item["term"] == old:
                 item["term"] = new
         self.lex.save()
+        self.lex.remember_correction(old, new)
         prefetch.drop_cache(old)
         self._sync_script(old, new)
 

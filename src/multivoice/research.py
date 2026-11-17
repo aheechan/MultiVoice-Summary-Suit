@@ -141,6 +141,8 @@ def queue_candidates(
             continue
         if any(term in entry.get("aliases", []) for entry in glossary.entries):
             continue
+        if term in glossary.corrections:
+            continue
         snippet = ""
         if context:
             position = context.find(term)

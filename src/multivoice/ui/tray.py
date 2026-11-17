@@ -495,11 +495,6 @@ class TrayApp(QSystemTrayIcon):
             self.open_panel()
             self.showMessage(i18n.t("app_name"), i18n.t("transcript_ready_msg"),
                              QSystemTrayIcon.MessageIcon.Information, 8000)
-            # Produce the clean spoken script automatically (after the worker exits).
-            QTimer.singleShot(
-                800,
-                lambda: self.start_job(self.last_source, ("generate",), "generate", outputs=("a",)),
-            )
         else:
             self.outputs_ready = True
             labels = {"a": "gen_a", "b": "gen_b", "c": "gen_c", "d": "gen_expand"}

@@ -127,7 +127,12 @@ def run(
     lex.prune_pending()
     from datetime import datetime
 
-    started_at = datetime.now().strftime("%m-%d %H:%M")
+    # The timestamp shown in review should be when the media was added,
+    # so use the file's own modification time rather than the run time.
+    try:
+        started_at = datetime.fromtimestamp(source.stat().st_mtime).strftime("%m-%d %H:%M")
+    except OSError:
+        started_at = datetime.now().strftime("%m-%d %H:%M")
 
     def report(value: int, key: str) -> None:
         if on_progress:

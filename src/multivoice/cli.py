@@ -89,10 +89,11 @@ def glossary_command(args, cfg: config.Config) -> int:
             aliases=args.alias,
             definition=args.definition,
             en=args.en,
-            kind=args.kind,
+            category=args.category,
+            domain=args.domain,
             topic=args.topic,
         )
-        print(f"saved: {entry['term']} kind={entry['kind']} ttl={entry['ttl_days']}")
+        print(f"saved: {entry['term']} category={entry.get('category')} domain={entry.get('domain')}")
         return 0
 
     if command == "research":
@@ -188,7 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     add_parser.add_argument("--alias", action="append", default=[])
     add_parser.add_argument("--definition", default="")
     add_parser.add_argument("--en", default="")
-    add_parser.add_argument("--kind", default="other")
+    add_parser.add_argument("--domain", default="")
+    add_parser.add_argument("--category", default="other")
     add_parser.add_argument("--topic", default="")
     research_parser = gloss_sub.add_parser("research", help="look a term up on the web")
     research_parser.add_argument("--term", required=True)

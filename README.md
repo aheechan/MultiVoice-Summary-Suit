@@ -52,18 +52,16 @@ python -m multivoice tray
 
 产物默认写到 `D:\Local Repositories\MultiVoice-Summary-Suit\output\<job-id>\`。
 
-## 梗词库与时效
+## 词库：类型与领域
 
-网络梗、人物绰号、产品名变化很快，所以词库按**时效类型**管理：
+词条描述的是客观存在的事物，**不会过期**。入库时回答两个问题，都用于检索与关联，不用于计时：
 
-| kind | 例子 | 有效期 |
+| 问题 | 选项 | 用途 |
 |---|---|---|
-| `evergreen` | 梁文锋、机构名、地名 | 10 年 |
-| `product` | V4Flash、V4Pro、DeepSeek Harness | 120 天 |
-| `current` | 斩杀线（当下网络热词） | 30 天 |
-| `event` | 具体新闻事件 | 90 天 |
+| 它是什么？ | 人物 / 机构 / 产品 / 工具 / 乐器 / 作品 / 人文概念 / 热词 / 理论 / 事件 / 地点 / 其他 | 描述事物性质 |
+| 它属于哪个领域？ | AI 与科技 / 商业财经 / 历史政治 / 科学医学 / 文化艺术 / 生活日常 / 其他 | 归入领域，便于按主题查阅 |
 
-每个词条记录 `last_verified`、`sources`、`confidence`。识别前会：
+每个词条记录 `category`、`domain`、`topic`、`sources`、`confidence`。识别前会：
 
 1. **别名修复**：把已知的听错写法直接替换成正确词（`梁盛 → 梁圣`、`转差线 → 斩杀线`）
 2. **按主题注入**：命中任一 DeepSeek 词条，就把整个 deepseek 主题包（人物、产品、梗）一起放进纠错提示
@@ -73,8 +71,8 @@ python -m multivoice tray
 mvs glossary list
 mvs glossary stale
 mvs glossary pending      # 搜不到、待人工确认的词
-mvs glossary stats        # 词条数、主题数、过期数
-mvs glossary add --term 梁圣 --alias 梁盛 --kind evergreen --topic deepseek --definition "..."
+mvs glossary stats        # 词条数、主题数、待审数
+mvs glossary add --term 梁圣 --alias 梁盛 --domain ai --topic deepseek --definition "..."
 mvs glossary research --term 新梗
 ```
 

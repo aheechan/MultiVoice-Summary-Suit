@@ -63,11 +63,14 @@ class TermEditDialog(QDialog):
         ("place", "q_place"),
         ("other", "q_other"),
     ]
-    KINDS = [
-        ("evergreen", "q_evergreen"),
-        ("product", "q_product_ttl"),
-        ("current", "q_current_ttl"),
-        ("event", "q_event_ttl"),
+    DOMAINS = [
+        ("ai", "q_evergreen"),
+        ("business", "q_product_ttl"),
+        ("history", "q_current_ttl"),
+        ("science", "q_event_ttl"),
+        ("culture", "dom_culture"),
+        ("life", "dom_life"),
+        ("other", "dom_other"),
     ]
 
     def __init__(self, term: str, hint: str = "", topics: list[str] | None = None,
@@ -105,17 +108,19 @@ class TermEditDialog(QDialog):
                 radio.setChecked(True)
         layout.addWidget(what_box)
 
-        ttl_box = QGroupBox(i18n.t("q_howlong"))
-        ttl_layout = QVBoxLayout(ttl_box)
-        self.kind_group = QButtonGroup(self)
-        for index, (value, label) in enumerate(self.KINDS):
+        domain_box = QGroupBox(i18n.t("q_howlong"))
+        domain_layout = QGridLayout(domain_box)
+        domain_layout.setHorizontalSpacing(18)
+        domain_layout.setVerticalSpacing(6)
+        self.domain_group = QButtonGroup(self)
+        for index, (value, label) in enumerate(self.DOMAINS):
             radio = QRadioButton(i18n.t(label))
             radio.setProperty("value", value)
-            self.kind_group.addButton(radio, index)
-            ttl_layout.addWidget(radio)
-            if value == "current":
+            self.domain_group.addButton(radio, index)
+            domain_layout.addWidget(radio, index // 2, index % 2)
+            if value == "ai":
                 radio.setChecked(True)
-        layout.addWidget(ttl_box)
+        layout.addWidget(domain_box)
 
         topic_row = QHBoxLayout()
         topic_row.addWidget(QLabel(i18n.t("topic")))
@@ -166,7 +171,7 @@ class TermEditDialog(QDialog):
             "definition": self.definition.toPlainText().strip(),
             "en": self._en,
             "category": self._checked_value(self.category_group),
-            "kind": self._checked_value(self.kind_group),
+            "domain": self._checked_value(self.domain_group),
             "topic": self.topic.currentText().strip(),
         }
 
@@ -373,13 +378,19 @@ class ReviewDialog(QDialog):
             if not dialog.exec():
                 continue
             values = dialog.values()
+            reason = ""
+            for item in self.lex.pending:
+                if item["term"] == term:
+                    reason = item.get("reason", "")
+                    break
+            topic = reason.split(":", 1)[1] if reason.startswith("discovered:") else values["topic"]
             self.lex.add(
                 values["term"],
                 definition=values["definition"],
                 en=values["en"],
                 category=values["category"],
-                kind=values["kind"],
-                topic=values["topic"],
+                domain=values["domain"],
+                topic=topic,
                 confidence="medium",
             )
             self.lex.resolve_pending(term)

@@ -143,25 +143,25 @@ class Glossary:
         return target
 
     def stats(self) -> dict:
-        kinds: dict[str, int] = {}
-        stale = 0
+        categories: dict[str, int] = {}
+        domains: dict[str, int] = {}
         for entry in self.entries:
-            kinds[entry.get("kind", "other")] = kinds.get(entry.get("kind", "other"), 0) + 1
-            if self.is_stale(entry):
-                stale += 1
+            category = entry.get("category", "other")
+            domain = entry.get("domain", "other")
+            categories[category] = categories.get(category, 0) + 1
+            domains[domain] = domains.get(domain, 0) + 1
         return {
             "entries": len(self.entries),
             "topics": len(self.topics),
             "pending": len(self.pending),
-            "stale": stale,
-            "by_kind": kinds,
+            "by_category": categories,
+            "by_domain": domains,
         }
 
     # ------------------------------------------------------------------ freshness
     def is_stale(self, entry: dict) -> bool:
-        kind = entry.get("kind", "other")
-        ttl = int(entry.get("ttl_days") or DEFAULT_TTL.get(kind, 180))
-        return _age_days(entry.get("last_verified", "")) > ttl
+        """Entries never expire: a term is a fact, not a subscription."""
+        return False
 
     def find(self, term: str) -> dict | None:
         for entry in self.entries:
@@ -182,7 +182,8 @@ class Glossary:
         definition: str = "",
         en: str = "",
         category: str = "slang",
-        kind: str = "other",
+        domain: str = "",
+        kind: str = "evergreen",
         topic: str = "",
         ttl_days: int | None = None,
         confidence: str = "medium",
@@ -198,6 +199,7 @@ class Glossary:
                 "definition": "",
                 "en": "",
                 "category": category,
+                "domain": domain,
                 "kind": kind,
                 "topic": topic,
                 "related": [],
@@ -206,7 +208,7 @@ class Glossary:
                 "auto": auto,
                 "valid_from": _today(),
                 "last_verified": _today(),
-                "ttl_days": ttl_days or DEFAULT_TTL.get(kind, 180),
+                "ttl_days": ttl_days or 36500,
             }
             self.entries.append(entry)
 
@@ -215,7 +217,8 @@ class Glossary:
                 entry["aliases"].append(alias)
         for key, value in (("definition", definition), ("en", en),
                            ("topic", topic), ("category", category),
-                           ("kind", kind), ("confidence", confidence)):
+                           ("domain", domain), ("kind", kind),
+                           ("confidence", confidence)):
             if value:
                 entry[key] = value
         for name in related or []:
@@ -226,7 +229,7 @@ class Glossary:
                 entry["sources"].append(url)
 
         entry["last_verified"] = _today()
-        entry["ttl_days"] = int(ttl_days or DEFAULT_TTL.get(entry.get("kind", "other"), 180))
+        entry["ttl_days"] = int(ttl_days or 36500)
         self.save()
         return entry
 
@@ -271,12 +274,9 @@ class Glossary:
         for entry in entries:
             alias = "、".join(entry.get("aliases", []))
             suffix = f"（曾被识别为：{alias}）" if alias else ""
-            stale = "（该词条已过期，需现场核实）" if self.is_stale(entry) else ""
-            kind = entry.get("kind", "other")
-            lines.append(
-                f"- {entry['term']}{suffix}［{kind}，{entry.get('last_verified', '')} 核实］"
-                f"{stale}：{entry.get('definition', '')}"
-            )
+            tags = "/".join(t for t in (entry.get("category"), entry.get("domain")) if t)
+            tag_text = f"［{tags}］" if tags else ""
+            lines.append(f"- {entry['term']}{suffix}{tag_text}：{entry.get('definition', '')}")
         return "\n".join(lines)
 
     def context_for(self, text: str) -> tuple[str, list[dict]]:

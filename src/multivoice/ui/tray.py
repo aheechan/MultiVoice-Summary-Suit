@@ -258,7 +258,7 @@ class TrayApp(QSystemTrayIcon):
 
         self.action_generators: dict[str, QAction] = {}
         for kind, label, desc in (
-            ("a", "gen_a", "gen_a_desc"),
+            ("d", "gen_expand", "gen_expand_desc"),
             ("b", "gen_b", "gen_b_desc"),
             ("c", "gen_c", "gen_c_desc"),
         ):
@@ -323,7 +323,7 @@ class TrayApp(QSystemTrayIcon):
         self.menu.addAction(self.action_run)
         self.menu.addAction(self.action_url)
         self.menu.addSeparator()
-        for kind in ("a", "b", "c"):
+        for kind in ("d", "b", "c"):
             self.menu.addAction(self.action_generators[kind])
         self.menu.addSeparator()
         self.menu.addAction(self.action_status)
@@ -376,8 +376,9 @@ class TrayApp(QSystemTrayIcon):
         out = self.last_output
         if not out or not out.exists():
             return None
-        if kind in ("a", "b", "c"):
-            names = {"a": "a-script.md", "b": "b-report.md", "c": "c-brief.md"}
+        if kind in ("a", "b", "c", "d"):
+            names = {"a": "a-script.md", "b": "b-report.md",
+                     "c": "c-brief.md", "d": "d-expand.md"}
             path = out / names[kind]
             return path if path.exists() else None
         text_dir = out / "text"
@@ -493,10 +494,15 @@ class TrayApp(QSystemTrayIcon):
             self.open_panel()
             self.showMessage(i18n.t("app_name"), i18n.t("transcript_ready_msg"),
                              QSystemTrayIcon.MessageIcon.Information, 8000)
+            # Produce the clean spoken script automatically (after the worker exits).
+            QTimer.singleShot(
+                800,
+                lambda: self.start_job(self.last_source, ("generate",), "generate", outputs=("a",)),
+            )
         else:
             self.outputs_ready = True
-            labels = {"a": "gen_a", "b": "gen_b", "c": "gen_c"}
-            kind_label = i18n.t(labels.get(kinds.split(",")[0], "gen_a"))
+            labels = {"a": "gen_a", "b": "gen_b", "c": "gen_c", "d": "gen_expand"}
+            kind_label = i18n.t(labels.get(kinds.split(",")[0], "gen_expand"))
             self.panel_status = i18n.t("status_outputs")
             self.action_status.setText(self.panel_status)
             self.showMessage(i18n.t("app_name"),
@@ -522,7 +528,8 @@ class TrayApp(QSystemTrayIcon):
             self.showMessage(i18n.t("app_name"), i18n.t("gen_hint"),
                              QSystemTrayIcon.MessageIcon.Warning, 4000)
             return
-        self.start_job(self.last_source, GENERATE_STAGES, "generate", (kind,))
+        stages = ("generate",) if kind == "a" else GENERATE_STAGES
+        self.start_job(self.last_source, stages, "generate", (kind,))
 
     def cancel_job(self) -> None:
         if not (self.worker and self.worker.isRunning()):

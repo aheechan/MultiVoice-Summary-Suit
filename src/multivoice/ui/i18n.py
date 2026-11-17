@@ -4,7 +4,10 @@ from __future__ import annotations
 STRINGS: dict[str, dict[str, str]] = {
     "en": {
         "app_name": "MultiVoice Summary Suit",
-        "subtitle": "Audio/video input → corrected script / knowledge brief → lexicon review",
+        "subtitle": "Audio/video import & analysis · corrected script / knowledge brief · smart term library",
+        "terms_badge": "Terms",
+        "gen_expand": "Expanded draft",
+        "gen_expand_desc": "Verifies non-common-sense points online and rewrites a coherent draft",
         "transcribe": "Drop a file / Open file",
         "from_url": "From URL…",
         "url_prompt": "Paste a public audio/video URL",
@@ -159,7 +162,10 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "zh": {
         "app_name": "MultiVoice Summary Suit",
-        "subtitle": "音视频语音输入 - 矫正口播稿/知识快报 - 知识库更新审查",
+        "subtitle": "音视频导入/音频提取分析 - 矫正口播稿/知识快报 - 智能词条库",
+        "terms_badge": "词条库",
+        "gen_expand": "知识拓展稿",
+        "gen_expand_desc": "查证原文里的非常识内容并重组为通顺新稿",
         "transcribe": "拖入文件 / 打开文件",
         "from_url": "从链接导入…",
         "url_prompt": "粘贴公开可下载的音视频链接",

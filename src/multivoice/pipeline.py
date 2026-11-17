@@ -125,6 +125,9 @@ def run(
     out = _output_dir(cfg, job)
     lex = glossary.load()
     lex.prune_pending()
+    from datetime import datetime
+
+    started_at = datetime.now().strftime("%m-%d %H:%M")
 
     def report(value: int, key: str) -> None:
         if on_progress:
@@ -202,7 +205,7 @@ def run(
             # Never write new terms silently: queue them for human review.
             queued_terms = research.queue_candidates(
                 research.triage(candidates, cfg, head), lex,
-                context=head, source=Path(source).stem[:8],
+                context=head, source=Path(source).stem[:8], when=started_at,
             )
             researched = []
             glossary_text, _ = lex.context_for(head)
@@ -261,14 +264,17 @@ def run(
             units = structure.extract_units(segments, cfg)
             _write(units_json, json.dumps(units, ensure_ascii=False, indent=2))
 
-    if "generate" in stages and units:
+    if "generate" in stages:
         report(95, "generate")
         transcript_text = "\n".join(seg.text for seg in segments)
         if "a" in outputs:
             _write(out / "a-script.md", generate.clean_script(segments, cfg))
-        if "b" in outputs:
+        if "d" in outputs:
+            _write(out / "d-expand.md",
+                   generate.expand_draft(segments, units or [], cfg))
+        if units and "b" in outputs:
             _write(out / "b-report.md", generate.report(units, cfg, transcript_text))
-        if "c" in outputs:
+        if units and "c" in outputs:
             _write(out / "c-brief.md", generate.brief(units, cfg, transcript_text))
 
     manifest = {

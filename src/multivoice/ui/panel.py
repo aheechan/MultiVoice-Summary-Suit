@@ -32,6 +32,7 @@ QLabel#subtitle { color: #7f93ad; font-size: 12px; }
 QLabel#status { color: #9fd8ff; font-size: 12px; }
 QLabel#info { color: #6f86a6; font-size: 11px; }
 QLabel#step { color: #7f93ad; font-size: 11px; }
+QLabel#badge_label { color: #7f93ad; font-size: 10px; }
 QLabel#next {
     color: #9fe3ff; font-size: 12px; font-weight: 600;
     background: #0b1a30; border: 1px solid #2b57c8; border-radius: 7px;
@@ -125,8 +126,15 @@ class Panel(QWidget):
         self.btn_lang.setFixedSize(38, 38)
         self.btn_lang.clicked.connect(self.tray.toggle_language)
 
-        buttons_col.addWidget(self.btn_review)
-        buttons_col.addWidget(self.btn_lang)
+        review_col = QVBoxLayout()
+        review_col.setSpacing(2)
+        review_col.addWidget(self.btn_review, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.badge_label = QLabel()
+        self.badge_label.setObjectName("badge_label")
+        self.badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        review_col.addWidget(self.badge_label)
+        buttons_col.addLayout(review_col)
+        buttons_col.addWidget(self.btn_lang, 0, Qt.AlignmentFlag.AlignTop)
         inner.addLayout(buttons_col)
 
         root.addWidget(card)
@@ -158,7 +166,7 @@ class Panel(QWidget):
         root.addWidget(self.next_step)
 
         self.output_buttons = {}
-        for kind in ("a", "b", "c"):
+        for kind in ("d", "b", "c"):
             button = QPushButton()
             button.setMinimumHeight(52)
             button.setEnabled(False)
@@ -228,11 +236,12 @@ class Panel(QWidget):
         self.btn_transcribe.setText(i18n.t("transcribe"))
         self.btn_url.setText(i18n.t("from_url"))
         for kind, label, desc in (
-            ("a", "gen_a", "gen_a_desc"),
+            ("d", "gen_expand", "gen_expand_desc"),
             ("b", "gen_b", "gen_b_desc"),
             ("c", "gen_c", "gen_c_desc"),
         ):
             self.output_buttons[kind].setText(f"{i18n.t(label)}\n{i18n.t(desc)}")
+        self.badge_label.setText(i18n.t("terms_badge"))
         self.btn_outputs.setText(i18n.t("open_output"))
         self.btn_settings.setText(i18n.t("settings").rstrip("…"))
         self.btn_about.setText(i18n.t("about"))

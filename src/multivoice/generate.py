@@ -63,3 +63,16 @@ def brief(units: list[dict], cfg: Config, transcript: str = "") -> str:
     prompt = _prompt("brief.zh.txt").replace("{{UNITS}}", payload)
     answer = chat([{"role": "user", "content": prompt}], cfg, max_tokens=2000)
     return _guard(answer, transcript or payload, ratio=1.0) or _fallback_brief(units)
+
+
+def expand_draft(segments: list[Segment], units: list[dict], cfg: Config) -> str:
+    """Rewrite the script with background added for non-common-sense points."""
+    body = "\n".join(seg.text for seg in segments)
+    payload = json.dumps(units, ensure_ascii=False, indent=2)
+    prompt = (
+        _prompt("expand.zh.txt")
+        .replace("{{TEXT}}", body)
+        .replace("{{UNITS}}", payload)
+    )
+    answer = chat([{"role": "user", "content": prompt}], cfg, max_tokens=8000)
+    return _guard(answer, body, ratio=2.08) or body.strip()

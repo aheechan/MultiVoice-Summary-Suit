@@ -1,7 +1,7 @@
 """Review dialog for terms that could not be confirmed automatically."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -271,15 +271,12 @@ class ReviewDialog(QDialog):
         self.btn_all.clicked.connect(lambda: self.set_all(True))
         self.btn_invert = QPushButton(i18n.t("invert"))
         self.btn_invert.clicked.connect(self.invert_selection)
-        self.btn_fix = QPushButton(i18n.t("fix_term"))
-        self.btn_fix.clicked.connect(self.fix_term)
         self.btn_fetch = QPushButton(i18n.t("fetch_missing"))
         self.btn_fetch.clicked.connect(self.fetch_missing)
         self.btn_manage = QPushButton(i18n.t("manage_terms"))
         self.btn_manage.clicked.connect(self.open_library)
         tools.addWidget(self.btn_all)
         tools.addWidget(self.btn_invert)
-        tools.addWidget(self.btn_fix)
         tools.addWidget(self.btn_fetch)
         tools.addStretch(1)
         tools.addWidget(self.btn_manage)
@@ -385,6 +382,8 @@ class ReviewDialog(QDialog):
             font.setBold(True)
             name.setFont(font)
             name.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            name.setProperty("term", term)
+            name.installEventFilter(self)
             term_row.addWidget(name, 1)
 
             stamp = entry.get("seen_at") or entry.get("first_seen", "")
@@ -521,6 +520,34 @@ class ReviewDialog(QDialog):
         self.status.setText(i18n.t("fetch_done", updated=updated, empty=empty))
         self.reload()
 
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.Type.MouseButtonDblClick:
+            term = obj.property("term")
+            if term:
+                self.set_all(False)
+                box = self.checks.get(term)
+                if box is not None:
+                    box.setChecked(True)
+                self.fix_term()
+                return True
+        return super().eventFilter(obj, event)
+
+    def _sync_script(self, old: str, new: str) -> None:
+        """Keep the generated clean script in sync after a term correction."""
+        try:
+            paths = sorted(self.cfg.output.glob("*/a-script.md"),
+                           key=lambda p: p.stat().st_mtime, reverse=True)
+        except OSError:
+            return
+        for path in paths[:5]:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if old in text:
+                path.write_text(text.replace(old, new), encoding="utf-8")
+                break
+
     def fix_term(self) -> None:
         """Correct a mis-recognised term, then search again with the new spelling."""
         terms = self.selected_terms()
@@ -548,6 +575,7 @@ class ReviewDialog(QDialog):
                 item["term"] = new
         self.lex.save()
         prefetch.drop_cache(old)
+        self._sync_script(old, new)
 
         self.status.setText(i18n.t("fix_done", term=new))
         QApplication.processEvents()

@@ -145,69 +145,6 @@ def _best_bing(term: str, hits: list[dict] | None) -> dict | None:
     return None
 
 
-# ---------------------------------------------------------------- Google
-def google(term: str, lang: str = "zh") -> dict | None:
-    """Google Custom Search JSON API (needs GOOGLE_API_KEY + GOOGLE_CX)."""
-    import os
-
-    key = os.environ.get("GOOGLE_API_KEY", "")
-    cx = os.environ.get("GOOGLE_CX", "")
-    if not key or not cx:
-        return None
-    params = urllib.parse.urlencode({
-        "key": key, "cx": cx, "q": term,
-        "num": "5", "hl": "zh-CN" if lang == "zh" else "en",
-    })
-    data = _get_json(f"https://www.googleapis.com/customsearch/v1?{params}")
-    try:
-        items = data["items"]
-    except (KeyError, TypeError):
-        return None
-    for hit in items:
-        title = hit.get("title", "")
-        snippet = hit.get("snippet", "")
-        if not _relevant(term, title, snippet):
-            continue
-        return {
-            "source": f"Google ({lang})",
-            "title": title[:120],
-            "snippet": snippet[:600],
-            "url": hit.get("link", ""),
-            "exact": term in title,
-        }
-    return None
-
-
-def duckduckgo(term: str, lang: str = "zh") -> dict | None:
-    """No-key HTML endpoint, used when Google has no API credentials."""
-    params = urllib.parse.urlencode({"q": term, "kl": "cn-zh" if lang == "zh" else "us-en"})
-    html = _get_text(f"https://html.duckduckgo.com/html/?{params}", timeout=12)
-    if not html:
-        return None
-    pattern = re.compile(
-        r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?'
-        r'class="result__snippet"[^>]*>(.*?)</a>',
-        re.S,
-    )
-    for href, inner, snippet_html in pattern.findall(html):
-        title = _strip_tags(inner)
-        snippet = _strip_tags(snippet_html)
-        if not _relevant(term, title, snippet):
-            continue
-        return {
-            "source": f"DuckDuckGo ({lang})",
-            "title": title[:120],
-            "snippet": snippet[:600],
-            "url": unquote(href),
-            "exact": term in title,
-        }
-    return None
-
-
-def _strip_tags(text: str) -> str:
-    return " ".join(unescape(re.sub(r"<[^>]+>", " ", text)).split())
-
-
 # ---------------------------------------------------------------- aggregate
 def collect(term: str) -> list[dict]:
     """One best, term-relevant result per source; irrelevant sources are dropped."""
@@ -222,14 +159,6 @@ def collect(term: str) -> list[dict]:
         page = baike(term)
         if page:
             evidence.append(page)
-
-    g = google(term, "zh" if has_cjk else "en")
-    if g:
-        evidence.append(g)
-    else:
-        ddg = duckduckgo(term, "zh" if has_cjk else "en")
-        if ddg:
-            evidence.append(ddg)
 
     bing = _best_bing(term, search.bing(term, 8, "zh" if has_cjk else "en"))
     if bing:

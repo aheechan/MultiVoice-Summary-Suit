@@ -283,8 +283,7 @@ class ReviewDialog(QDialog):
             if record is None:
                 summary = i18n.t("not_fetched")
             elif record.get("empty"):
-                dropped.append(term)
-                continue
+                summary = i18n.t("no_result")
             else:
                 summary = record.get("summary_zh" if language == "zh" else "summary_en") or ""
                 titles = record.get("zh" if language == "zh" else "en") or []
@@ -451,7 +450,8 @@ class ReviewDialog(QDialog):
                 self.lex.queue(term, reason="still unconfirmed")
                 unconfirmed += 1
             else:
-                self.lex.resolve_pending(term)
+                # No reliable match: keep it visible instead of silently deleting.
+                self.lex.queue(term, reason="no-match")
                 dropped += 1
 
             progress.setValue(index)

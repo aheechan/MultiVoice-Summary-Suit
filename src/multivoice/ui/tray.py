@@ -615,40 +615,22 @@ class TrayApp(QSystemTrayIcon):
         QApplication.quit()
 
 
-def _pid_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
+_MUTEX_HANDLE = None
+
+
+def _acquire_instance_mutex() -> bool:
+    """Named mutex: released by the kernel when the process dies."""
+    global _MUTEX_HANDLE
     try:
         import ctypes
 
-        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
-        if not handle:
-            return False
-        ctypes.windll.kernel32.CloseHandle(handle)
-        return True
+        kernel32 = ctypes.windll.kernel32
+        _MUTEX_HANDLE = kernel32.CreateMutexW(None, False, "Local\\MultiVoiceSummarySuit")
+        if not _MUTEX_HANDLE:
+            return True
+        return kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
     except Exception:
-        return False
-
-
-def _acquire_lock(path: Path) -> bool:
-    """PID-based single-instance lock that survives crashes."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        try:
-            pid = int(path.read_text(encoding="utf-8").strip())
-        except (OSError, ValueError):
-            pid = 0
-        if _pid_alive(pid):
-            return False
-        try:
-            path.unlink()
-        except OSError:
-            pass
-    try:
-        path.write_text(str(os.getpid()), encoding="utf-8")
-    except OSError:
         return True
-    return True
 
 
 def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
@@ -657,7 +639,7 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
     app.setApplicationName(i18n.t("app_name"))
     app.setQuitOnLastWindowClosed(False)
 
-    if not _acquire_lock(cfg.work / ".instance.pid"):
+    if not _acquire_instance_mutex():
         print("MultiVoice is already running. Use the tray icon to open it.")
         return 0
 

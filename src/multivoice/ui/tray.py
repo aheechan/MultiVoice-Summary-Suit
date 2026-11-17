@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLockFile, QSize, QThread, QTimer, Signal
+from PySide6.QtCore import QSize, QThread, QTimer, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -615,19 +615,51 @@ class TrayApp(QSystemTrayIcon):
         QApplication.quit()
 
 
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
+    except Exception:
+        return False
+
+
+def _acquire_lock(path: Path) -> bool:
+    """PID-based single-instance lock that survives crashes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        try:
+            pid = int(path.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            pid = 0
+        if _pid_alive(pid):
+            return False
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    try:
+        path.write_text(str(os.getpid()), encoding="utf-8")
+    except OSError:
+        return True
+    return True
+
+
 def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
              show_review: bool = False) -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName(i18n.t("app_name"))
     app.setQuitOnLastWindowClosed(False)
 
-    cfg.work.mkdir(parents=True, exist_ok=True)
-    lock = QLockFile(str(cfg.work / ".instance.lock"))
-    lock.setStaleLockTime(0)
-    if not lock.tryLock(100):
+    if not _acquire_lock(cfg.work / ".instance.pid"):
         print("MultiVoice is already running. Use the tray icon to open it.")
         return 0
-    app._instance_lock = lock  # type: ignore[attr-defined]
 
     selftest = bool(os.environ.get("MVS_TRAY_SELFTEST"))
     if not selftest and not QSystemTrayIcon.isSystemTrayAvailable():

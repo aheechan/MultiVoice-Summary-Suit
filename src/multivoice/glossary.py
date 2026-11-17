@@ -164,13 +164,17 @@ class Glossary:
         if len(self.pending) != before:
             self.save()
 
-    def prune_pending(self, max_age_days: int = 14, max_attempts: int = 3) -> list[str]:
-        """Drop terms that never found a source: no evidence means no entry."""
+    def prune_pending(self, max_age_days: int = 0, max_attempts: int = 0) -> list[str]:
+        """Optionally drop ancient review items; 0 disables the rule.
+
+        Attempt-count pruning is off by default: a term that keeps showing up in
+        new recordings is exactly the one a human should decide about.
+        """
         keep: list[dict] = []
         dropped: list[str] = []
         for item in self.pending:
-            too_old = _age_days(item.get("first_seen", "")) > max_age_days
-            too_many = item.get("attempts", 1) >= max_attempts
+            too_old = bool(max_age_days) and _age_days(item.get("first_seen", "")) > max_age_days
+            too_many = bool(max_attempts) and item.get("attempts", 1) >= max_attempts
             if too_old or too_many:
                 dropped.append(item["term"])
             else:

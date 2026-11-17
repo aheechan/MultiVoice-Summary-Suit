@@ -135,14 +135,24 @@ def _suggest(term: str, cfg: Config) -> str:
     if similar and sources.collect(similar):
         return similar
 
+    # Search-engine suggestions: take the prefix that has the same length and
+    # verify it against real sources (this is how 张居中 becomes 张居正).
+    for suggestion in sources.baidu_suggest(term):
+        candidate = suggestion[:len(term)]
+        if candidate and candidate != term and sources.collect(candidate):
+            if _same_kind(term, candidate) or (
+                len(candidate) == len(term)
+                and sum(1 for a, b in zip(term, candidate) if a == b) >= 2
+            ):
+                return candidate
+
     if context:
         suggestion = research.suggest_correction(term, context, cfg)
         if suggestion and suggestion != term and sources.collect(suggestion):
             return suggestion
         return ""
 
-    # No context stored: still ask the model for a likely homophone, but only
-    # auto-adopt it when both spellings are clearly the same kind of place name.
+    # No context stored: only place names may be auto-corrected from a model guess.
     suggestion = research.suggest_correction(term, "", cfg)
     if suggestion and suggestion != term and _same_kind(term, suggestion) \
             and sources.collect(suggestion):
@@ -164,22 +174,39 @@ def _llm_suggestion(term: str, cfg: Config) -> str:
     return research.suggest_correction(term, context, cfg)
 
 
+def _context_of(term: str) -> str:
+    from . import glossary as glossary_module
+
+    lex = glossary_module.load()
+    for item in lex.pending:
+        if item["term"] == term:
+            return item.get("context", "")
+    return ""
+
+
 def _try_correction(term: str, cfg: Config, suggestion: str) -> str:
     """If the suggested spelling has real evidence, adopt it with an alias."""
     from . import glossary as glossary_module
 
     if not suggestion or not sources.collect(suggestion):
-        return ""
+        # One retry: search endpoints rate-limit aggressively.
+        import time
+
+        time.sleep(0.8)
+        if not suggestion or not sources.collect(suggestion):
+            return ""
     lex = glossary_module.load()
     build(suggestion, cfg)  # one level of recursion
     lex = glossary_module.load()  # build() may have written a new entry
     entry = lex.find(suggestion)
     if entry is None:
         return ""
-    if term not in entry.get("aliases", []):
-        entry.setdefault("aliases", []).append(term)
-        lex.save()
+    # Drop a now-superseded auto entry for the misheard spelling.
+    old = lex.find(term)
+    if old is not None and old.get("auto"):
+        lex.entries = [e for e in lex.entries if e["term"] != term]
     lex.resolve_pending(term)
+    lex.save()
     return suggestion
 
 
@@ -188,23 +215,48 @@ def build(term: str, cfg: Config) -> dict | None:
     from . import glossary as glossary_module
 
     evidence = sources.collect(term)
-    if not evidence:
+    exact = sources.has_exact(evidence) if evidence else None
+
+    # A term in the transcript may still be a mishearing even when the spelling
+    # happens to match a real but unrelated entry. Prefer the context-backed
+    # candidate when it is corroborated by at least two sources.
+    context = _context_of(term)
+    if context and exact:
+        suggestion = _suggest(term, cfg)
+        if suggestion and len(sources.collect(suggestion)) >= 2:
+            corrected = _try_correction(term, cfg, suggestion)
+            if corrected:
+                record = {
+                    "zh": [], "en": [], "evidence": [],
+                    "summary_zh": "", "summary_en": "",
+                    "empty": True, "corrected_to": corrected,
+                    "suggest": "",
+                    "at": date.today().isoformat(),
+                }
+                data = _read_cache()
+                data[term] = record
+                _write_cache(data)
+                return record
+
+    # Without an exact source match, try to fix a likely homophone first.
+    if not exact:
         suggestion = _suggest(term, cfg)
         corrected = _try_correction(term, cfg, suggestion) if suggestion else ""
-        if not corrected:
+        if not corrected and not evidence and not suggestion:
             suggestion = _llm_suggestion(term, cfg)
-        record = {
-            "zh": [], "en": [], "evidence": [],
-            "summary_zh": "", "summary_en": "",
-            "empty": True,
-            "suggest": "" if corrected else suggestion,
-            "corrected_to": corrected,
-            "at": date.today().isoformat(),
-        }
-        data = _read_cache()
-        data[term] = record
-        _write_cache(data)
-        return record
+        if corrected or not evidence:
+            record = {
+                "zh": [], "en": [], "evidence": evidence or [],
+                "summary_zh": "", "summary_en": "",
+                "empty": True,
+                "suggest": "" if corrected else suggestion,
+                "corrected_to": corrected,
+                "at": date.today().isoformat(),
+            }
+            data = _read_cache()
+            data[term] = record
+            _write_cache(data)
+            return record
 
     summary_zh, summary_en = _summary_from_evidence(term, cfg, evidence)
     record = {

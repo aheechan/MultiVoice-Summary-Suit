@@ -385,8 +385,12 @@ class ReviewDialog(QDialog):
             term_row.addWidget(name, 1)
 
             stamp = entry.get("seen_at") or entry.get("first_seen", "")
-            if stamp:
-                when = QLabel(stamp)
+            origin = entry.get("source", "")
+            if stamp or origin:
+                label_text = stamp
+                if origin:
+                    label_text = f"{label_text} · {origin}…" if label_text else f"{origin}…"
+                when = QLabel(label_text)
                 when.setObjectName("titles")
                 when.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
                 term_row.addWidget(when)

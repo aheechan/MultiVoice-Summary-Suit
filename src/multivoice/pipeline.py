@@ -201,7 +201,8 @@ def run(
             report(66, "research")
             # Never write new terms silently: queue them for human review.
             queued_terms = research.queue_candidates(
-                research.triage(candidates, cfg, head), lex, context=head
+                research.triage(candidates, cfg, head), lex,
+                context=head, source=Path(source).stem[:8],
             )
             researched = []
             glossary_text, _ = lex.context_for(head)

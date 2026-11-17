@@ -126,6 +126,13 @@ def _strip_tags(text: str) -> str:
 
 
 # ---------------------------------------------------------------- Bing
+def baidu_suggest(term: str, limit: int = 10) -> list[str]:
+    """Baidu search suggestions; useful when the term itself has no lemma."""
+    url = "https://www.baidu.com/sugrec?prod=pc&wd=" + urllib.parse.quote(term)
+    data = _get_json(url)
+    if not data:
+        return []
+    return [str(item.get("q", "")) for item in (data.get("g") or [])][:limit]
 def _best_bing(term: str, hits: list[dict] | None) -> dict | None:
     if not hits:
         return None

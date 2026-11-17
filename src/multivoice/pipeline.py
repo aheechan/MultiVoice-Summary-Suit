@@ -107,6 +107,24 @@ def _transcribe_chunked(audio: Path, cfg: Config, job: Path, report=None) -> tup
     return segments, language
 
 
+def _position_map(segments, terms: list[str]) -> dict[str, str]:
+    """Estimate where each term was spoken, in mm:ss, from segment offsets."""
+    positions: dict[str, str] = {}
+    for segment in segments:
+        text = segment.text or ""
+        for term in terms:
+            if term in positions:
+                continue
+            index = text.find(term)
+            if index < 0:
+                continue
+            span = max(0.0, float(segment.end) - float(segment.start))
+            ratio = index / max(1, len(text))
+            seconds = float(segment.start) + ratio * span
+            positions[term] = f"{int(seconds) // 60:02d}:{int(seconds) % 60:02d}"
+    return positions
+
+
 def run(
     source: Path,
     cfg: Config,
@@ -209,12 +227,7 @@ def run(
             candidates += [entry["term"] for entry in lex.match(head)]
             report(66, "research")
             # Never write new terms silently: queue them for human review.
-            positions: dict[str, str] = {}
-            for segment in segments:
-                for term in candidates:
-                    if term not in positions and term in segment.text:
-                        start = int(getattr(segment, "start", 0) or 0)
-                        positions[term] = f"{start // 60:02d}:{start % 60:02d}"
+            positions = _position_map(segments, candidates)
             queued_terms = research.queue_candidates(
                 research.triage(candidates, cfg, head), lex,
                 context=head, source=Path(source).stem[:8], when=started_at,

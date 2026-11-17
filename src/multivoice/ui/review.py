@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QProgressDialog,
@@ -191,6 +192,20 @@ class ReviewDialog(QDialog):
         self.hint.setWordWrap(True)
         layout.addWidget(self.hint)
 
+        tools = QHBoxLayout()
+        tools.setSpacing(8)
+        self.btn_all = QPushButton(i18n.t("select_all"))
+        self.btn_all.clicked.connect(lambda: self.set_all(True))
+        self.btn_invert = QPushButton(i18n.t("invert"))
+        self.btn_invert.clicked.connect(self.invert_selection)
+        self.btn_fix = QPushButton(i18n.t("fix_term"))
+        self.btn_fix.clicked.connect(self.fix_term)
+        tools.addWidget(self.btn_all)
+        tools.addWidget(self.btn_invert)
+        tools.addWidget(self.btn_fix)
+        tools.addStretch(1)
+        layout.addLayout(tools)
+
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -317,6 +332,39 @@ class ReviewDialog(QDialog):
     # ------------------------------------------------------------------ actions
     def selected_terms(self) -> list[str]:
         return [term for term, box in self.checks.items() if box.isChecked()]
+
+    def set_all(self, checked: bool) -> None:
+        for box in self.checks.values():
+            box.setChecked(checked)
+
+    def invert_selection(self) -> None:
+        for box in self.checks.values():
+            box.setChecked(not box.isChecked())
+
+    def fix_term(self) -> None:
+        """Correct a mis-recognised term, then search again with the new spelling."""
+        terms = self.selected_terms()
+        if len(terms) != 1:
+            self.status.setText(i18n.t("review_hint"))
+            return
+        old = terms[0]
+        new, ok = QInputDialog.getText(
+            self, i18n.t("fix_term"), i18n.t("fix_prompt"), text=old
+        )
+        new = new.strip()
+        if not ok or not new or new == old:
+            return
+
+        for item in self.lex.pending:
+            if item["term"] == old:
+                item["term"] = new
+        self.lex.save()
+        prefetch.drop_cache(old)
+
+        self.status.setText(i18n.t("fix_done", term=new))
+        QApplication.processEvents()
+        prefetch.build(new, self.cfg)
+        self.reload()
 
     def add_selected(self) -> None:
         for term in self.selected_terms():

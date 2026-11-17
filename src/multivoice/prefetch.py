@@ -29,6 +29,13 @@ def _write_cache(data: dict) -> None:
     CACHE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def drop_cache(term: str) -> None:
+    data = _read_cache()
+    if term in data:
+        data.pop(term)
+        _write_cache(data)
+
+
 def cached(term: str) -> dict | None:
     entry = _read_cache().get(term)
     if not entry:

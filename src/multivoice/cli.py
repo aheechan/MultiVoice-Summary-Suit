@@ -203,6 +203,9 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument(
         "--no-resume", action="store_true", help="ignore cached job artifacts"
     )
+    run_parser.add_argument(
+        "--outputs", default="a,b,c", help="comma separated: a,b,c"
+    )
 
     args = parser.parse_args(argv)
     cfg = config.load(args.config_dir)
@@ -231,9 +234,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     stages = tuple(s.strip() for s in args.stages.split(",") if s.strip())
+    outputs = tuple(s.strip() for s in args.outputs.split(",") if s.strip())
     out = pipeline.run(
         Path(args.input), cfg, language=args.lang, stages=stages,
-        resume=not args.no_resume,
+        resume=not args.no_resume, outputs=outputs,
     )
     print(f"done -> {out}")
     return 0

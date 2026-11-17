@@ -363,25 +363,35 @@ class ReviewDialog(QDialog):
             inner.setContentsMargins(14, 12, 14, 12)
             inner.setSpacing(6)
 
-            box = QCheckBox(term)
+            box = QCheckBox()
             box.setObjectName("term")
-            font = box.font()
-            font.setBold(True)
-            box.setFont(font)
             box.setChecked(term in checked)
             self.checks[term] = box
-            inner.addWidget(box)
+
+            term_row = QHBoxLayout()
+            term_row.setSpacing(8)
+            term_row.addWidget(box)
+            name = QLabel(term)
+            name.setObjectName("term")
+            font = name.font()
+            font.setBold(True)
+            name.setFont(font)
+            name.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            term_row.addWidget(name, 1)
+            inner.addLayout(term_row)
 
             if summary:
                 label = QLabel(summary)
                 label.setObjectName("summary")
                 label.setWordWrap(True)
+                label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
                 inner.addWidget(label)
 
             if titles:
                 meta = QLabel("· " + "  |  ".join(titles[:2]))
                 meta.setObjectName("titles")
                 meta.setWordWrap(True)
+                meta.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
                 inner.addWidget(meta)
 
             evidence = (record or {}).get("evidence") or []
@@ -465,14 +475,20 @@ class ReviewDialog(QDialog):
         progress.setValue(0)
         QApplication.processEvents()
 
+        updated = empty = 0
         for index, term in enumerate(missing, 1):
             progress.setLabelText(f"{term}  ({index}/{len(missing)})")
             QApplication.processEvents()
-            prefetch.build(term, self.cfg)
+            record = prefetch.build(term, self.cfg)
+            if record and not record.get("empty"):
+                updated += 1
+            else:
+                empty += 1
             progress.setValue(index)
             QApplication.processEvents()
 
         progress.close()
+        self.status.setText(i18n.t("fetch_done", updated=updated, empty=empty))
         self.reload()
 
     def fix_term(self) -> None:
@@ -482,8 +498,16 @@ class ReviewDialog(QDialog):
             self.status.setText(i18n.t("review_hint"))
             return
         old = terms[0]
+        context = ""
+        for item in self.lex.pending:
+            if item["term"] == old:
+                context = item.get("context", "")
+                break
+        suggestion = research.suggest_correction(old, context, self.cfg) if context else ""
         new, ok = QInputDialog.getText(
-            self, i18n.t("fix_term"), i18n.t("fix_prompt"), text=old
+            self, i18n.t("fix_term"),
+            i18n.t("fix_prompt") + (f"\n\n{i18n.t('fix_suggest')}: {suggestion}" if suggestion else ""),
+            text=suggestion or old,
         )
         new = new.strip()
         if not ok or not new or new == old:

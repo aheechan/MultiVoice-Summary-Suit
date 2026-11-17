@@ -103,7 +103,8 @@ def research_term(term: str, glossary: Glossary, cfg: Config) -> tuple[dict | No
 
 
 def queue_candidates(
-    terms: list[str], glossary: Glossary, limit: int = 8, reason: str = "from-job"
+    terms: list[str], glossary: Glossary, limit: int = 8,
+    reason: str = "from-job", context: str = "",
 ) -> list[str]:
     """Queue unknown terms for human review instead of writing them silently."""
     queued: list[str] = []
@@ -118,9 +119,39 @@ def queue_candidates(
             continue
         if any(item["term"] == term for item in glossary.pending):
             continue
+        snippet = ""
+        if context:
+            position = context.find(term)
+            if position >= 0:
+                snippet = context[max(0, position - 60):position + len(term) + 60]
         glossary.queue(term, reason=reason)
+        if snippet:
+            for item in glossary.pending:
+                if item["term"] == term:
+                    item["context"] = snippet
+            glossary.save()
         queued.append(term)
     return queued
+
+
+def suggest_correction(term: str, context: str, cfg: Config) -> str:
+    """Ask the model whether a term is a mis-recognition of a similar name."""
+    if cfg is None:
+        return ""
+    try:
+        answer = chat(
+            [{"role": "user", "content":
+              "下面是一段转写文本的片段，其中出现了词条「" + term + "」。\n"
+              f"上下文：{context}\n\n"
+              "请判断这个词条是否很可能是另一个相近词（人名、地名、专有名词）的误识别。"
+              "如果很可能写错了，只输出正确写法；如果识别无误，原样输出该词条。"
+              "不要解释，不要标点。"}],
+            cfg, temperature=0.0, max_tokens=32,
+        )
+        candidate = answer.strip().strip("。.,，")
+        return candidate if candidate and candidate != term else ""
+    except Exception:
+        return ""
 
 
 def ensure_terms(

@@ -101,7 +101,16 @@ def build(term: str, cfg: Config) -> dict | None:
 
     evidence = sources.collect(term)
     if not evidence:
-        return None  # network failure: keep the term, learn nothing
+        # Persist the "nothing found" state so the UI visibly updates.
+        record = {
+            "zh": [], "en": [], "evidence": [],
+            "summary_zh": "", "summary_en": "",
+            "empty": True, "at": date.today().isoformat(),
+        }
+        data = _read_cache()
+        data[term] = record
+        _write_cache(data)
+        return record
 
     summary_zh, summary_en = _summary_from_evidence(term, cfg, evidence)
     record = {
@@ -115,7 +124,7 @@ def build(term: str, cfg: Config) -> dict | None:
     }
 
     exact = sources.has_exact(evidence)
-    if exact and exact["source"].startswith("Wikipedia") and _probable_name(term):
+    if exact and exact["source"].split(" ")[0] in ("Wikipedia", "Baidu") and _probable_name(term):
         lex = glossary_module.load()
         if lex.find(term) is None:
             lex.add(

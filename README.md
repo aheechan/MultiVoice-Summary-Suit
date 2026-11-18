@@ -169,7 +169,7 @@ Provider order is editable in the app (add / edit / reorder / test). If the firs
 
 ## License
 
-License not chosen yet. Until a `LICENSE` file is added, all rights are reserved.
+MIT — see [LICENSE](LICENSE).
 
 ## Links
 

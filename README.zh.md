@@ -168,7 +168,7 @@ mvs cache --clean --days 30
 
 ## 许可
 
-尚未选择许可证。在加入 `LICENSE` 文件之前，保留所有权利。
+MIT，详见 [LICENSE](LICENSE)。
 
 ## 链接
 

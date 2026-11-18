@@ -2,7 +2,14 @@
 name = "multivoice-summary-suit"
 version = "0.1.0"
 description = "Turn multilingual speech into clean transcripts, knowledge reports and briefs."
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "GPL-3.0-only" }
+authors = [{ name = "Ahee52" }]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+]
 dependencies = []
 
 [project.optional-dependencies]

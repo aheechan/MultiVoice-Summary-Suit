@@ -282,8 +282,8 @@ def run(
         try:
             from . import subtitle
 
-            cues = subtitle.cues_from_segments(segments)
-            subtitle.write_pair(out / "text", cues, cfg)
+            cues = subtitle.base_cues(segments)
+            subtitle.write_pair(out / "text", cues, cfg, source_lang)
         except Exception:
             pass
 

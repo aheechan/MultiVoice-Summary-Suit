@@ -50,13 +50,7 @@ if ($IncludeModel -and (Test-Path $AsrModel)) {
 }
 
 Write-Host "6/6 writing portable config and launcher..."
-$venvCfg = Join-Path $Dist 'runtime\venv\pyvenv.cfg'
-@(
-    'home = ..\python',
-    'implementation = CPython',
-    'version_info = 3.12.10',
-    'include-system-site-packages = false'
-) | Set-Content -Path $venvCfg -Encoding ASCII
+$utf8 = New-Object System.Text.UTF8Encoding($false)
 
 $configDir = Join-Path $Dist 'app\configs'
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
@@ -75,7 +69,7 @@ ffprobe = "../runtime/ffmpeg/bin/ffprobe.exe"
 [output]
 languages = ["zh", "en"]
 '@
-Set-Content -Path (Join-Path $configDir 'paths.toml') -Value $paths -Encoding UTF8
+[System.IO.File]::WriteAllText((Join-Path $configDir 'paths.toml'), $paths, $utf8)
 
 $models = @'
 [asr]
@@ -91,21 +85,22 @@ model = "Qwen3.5-9B"
 enabled = true
 priority = 1
 '@
-Set-Content -Path (Join-Path $configDir 'models.toml') -Value $models -Encoding UTF8
+[System.IO.File]::WriteAllText((Join-Path $configDir 'models.toml'), $models, $utf8)
 
 $bat = @'
 @echo off
 setlocal
 cd /d "%~dp0app"
-set "PYTHONPATH=%~dp0app\src"
+set "PYTHONPATH=%~dp0app\src;%~dp0runtime\venv\Lib\site-packages"
 set "MVS_CONFIG_DIR=%~dp0app\configs"
 set "MVS_GLOSSARY=%~dp0glossary\terms.jsonl"
 if not exist "%~dp0work" mkdir "%~dp0work"
 if not exist "%~dp0output" mkdir "%~dp0output"
 if not exist "%~dp0glossary" mkdir "%~dp0glossary"
-"%~dp0runtime\venv\Scripts\pythonw.exe" -m multivoice.ui.tray --panel
+"%~dp0runtime\python\pythonw.exe" -m multivoice.ui.tray --panel
 '@
-Set-Content -Path (Join-Path $Dist 'Start-MultiVoice.bat') -Value $bat -Encoding ASCII
+[System.IO.File]::WriteAllText((Join-Path $Dist 'Start-MultiVoice.bat'), $bat,
+    (New-Object System.Text.ASCIIEncoding))
 
 New-Item -ItemType Directory -Force -Path (Join-Path $Dist 'work') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $Dist 'output') | Out-Null

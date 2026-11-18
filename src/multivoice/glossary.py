@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime
 from pathlib import Path
 
 DEFAULT_PATH = Path(
-    r"D:/Local Repositories/MultiVoice-Summary-Suit/glossary/terms.jsonl"
+    os.environ.get("MVS_GLOSSARY")
+    or r"D:/Local Repositories/MultiVoice-Summary-Suit/glossary/terms.jsonl"
 )
 
 # How long an entry stays trustworthy before it must be re-checked.

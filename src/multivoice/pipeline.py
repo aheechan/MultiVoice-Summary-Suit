@@ -301,14 +301,27 @@ def run(
         report(95, "generate")
         transcript_text = "\n".join(seg.text for seg in segments)
 
+        english_source = source_lang.lower().startswith("en")
+
         def emit(name: str, content: str) -> None:
-            _write(out / name, content)
-            try:
-                english = generate.english_doc(content, cfg)
-            except Exception:
-                english = ""
-            if english.strip():
-                _write(out / name.replace(".md", ".en.md"), english)
+            """Always end up with a Chinese file plus an English file."""
+            if not content.strip():
+                return
+            if english_source:
+                _write(out / name.replace(".md", ".en.md"), content)
+                try:
+                    chinese = generate.chinese_doc(content, cfg)
+                except Exception:
+                    chinese = ""
+                _write(out / name, chinese or content)
+            else:
+                _write(out / name, content)
+                try:
+                    english = generate.english_doc(content, cfg)
+                except Exception:
+                    english = ""
+                if english.strip():
+                    _write(out / name.replace(".md", ".en.md"), english)
 
         if "a" in outputs:
             emit("a-script.md", generate.clean_script(segments, cfg))

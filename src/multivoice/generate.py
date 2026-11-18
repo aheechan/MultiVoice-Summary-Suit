@@ -77,6 +77,17 @@ def english_doc(text: str, cfg: Config) -> str:
     return chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
 
 
+def chinese_doc(text: str, cfg: Config) -> str:
+    """Translate a finished deliverable into Chinese, keeping its structure."""
+    if not text.strip():
+        return ""
+    prompt = (
+        "把下面这份文档翻译成自然、专业的中文。保留 Markdown 标题、列表和段落结构，"
+        "不要总结、不要增删内容。只输出译文。\n\n" + text
+    )
+    return chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
+
+
 def expand_draft(segments: list[Segment], units: list[dict], cfg: Config,
                  glossary_text: str = "") -> str:
     """Rewrite the script with background added for non-common-sense points."""

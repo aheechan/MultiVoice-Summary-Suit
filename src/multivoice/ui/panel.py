@@ -276,7 +276,7 @@ class Panel(QWidget):
         except Exception:
             count = 0
         self.btn_review.setText(str(count))
-        self.btn_review.setEnabled(count > 0)
+        self.btn_review.setEnabled(True)  # library stays reachable at 0
         self.btn_review.setToolTip(i18n.t("review", n=count))
         self.info.setText(i18n.t("review_info", n=count) if count else "")
 

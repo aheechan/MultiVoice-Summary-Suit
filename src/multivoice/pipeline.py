@@ -279,6 +279,13 @@ def run(
                 continue
             translated = translate.translate_paragraphs(paras, source_lang, target, cfg)
             translate.write_bilingual(out / "text", paras, translated, source_lang, target)
+        try:
+            from . import subtitle
+
+            cues = subtitle.cues_from_segments(segments)
+            subtitle.write_pair(out / "text", cues, cfg)
+        except Exception:
+            pass
 
     units: list[dict] = []
     units_json = job / "units.json"
@@ -293,16 +300,26 @@ def run(
     if "generate" in stages:
         report(95, "generate")
         transcript_text = "\n".join(seg.text for seg in segments)
+
+        def emit(name: str, content: str) -> None:
+            _write(out / name, content)
+            try:
+                english = generate.english_doc(content, cfg)
+            except Exception:
+                english = ""
+            if english.strip():
+                _write(out / name.replace(".md", ".en.md"), english)
+
         if "a" in outputs:
-            _write(out / "a-script.md", generate.clean_script(segments, cfg))
+            emit("a-script.md", generate.clean_script(segments, cfg))
         if "b" in outputs:
             glossary_text, _ = lex.context_for(transcript_text)
-            _write(out / "b-expand.md",
-                   generate.expand_draft(segments, units or [], cfg, glossary_text))
+            emit("b-expand.md",
+                 generate.expand_draft(segments, units or [], cfg, glossary_text))
         if units and "c" in outputs:
-            _write(out / "c-report.md", generate.report(units, cfg, transcript_text))
+            emit("c-report.md", generate.report(units, cfg, transcript_text))
         if units and "d" in outputs:
-            _write(out / "d-brief.md", generate.brief(units, cfg, transcript_text))
+            emit("d-brief.md", generate.brief(units, cfg, transcript_text))
 
     manifest = {
         "source": str(source),

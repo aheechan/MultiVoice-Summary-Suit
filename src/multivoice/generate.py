@@ -65,6 +65,18 @@ def brief(units: list[dict], cfg: Config, transcript: str = "") -> str:
     return _guard(answer, transcript or payload, ratio=1.0) or _fallback_brief(units)
 
 
+def english_doc(text: str, cfg: Config) -> str:
+    """Translate a finished deliverable into English, keeping its structure."""
+    if not text.strip():
+        return ""
+    prompt = (
+        "Translate the following document into natural, professional English. "
+        "Keep the markdown headings, bullet lists and paragraph breaks. "
+        "Do not summarise or add content. Output only the translation.\n\n" + text
+    )
+    return chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
+
+
 def expand_draft(segments: list[Segment], units: list[dict], cfg: Config,
                  glossary_text: str = "") -> str:
     """Rewrite the script with background added for non-common-sense points."""

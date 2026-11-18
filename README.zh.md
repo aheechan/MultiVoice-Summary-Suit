@@ -168,7 +168,7 @@ mvs cache --clean --days 30
 
 ## 许可
 
-MIT，详见 [LICENSE](LICENSE)。
+GPL-3.0，详见 [LICENSE](LICENSE)。便携包内置的是 GPL 版 FFmpeg，所以选用 GNU GPL 以保持一致。
 
 ## 链接
 

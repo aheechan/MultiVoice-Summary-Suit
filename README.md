@@ -169,7 +169,8 @@ Provider order is editable in the app (add / edit / reorder / test). If the firs
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+GPL-3.0 — see [LICENSE](LICENSE). This project bundles a GPL build of FFmpeg in its
+portable package, so the GNU GPL is the compatible choice.
 
 ## Links
 

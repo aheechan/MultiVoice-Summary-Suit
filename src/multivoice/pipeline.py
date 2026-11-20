@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -65,6 +66,15 @@ def _output_dir(cfg: Config, job: Path) -> Path:
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _plain(text: str) -> str:
+    """Strip light markdown so the .txt deliverables read cleanly in Notepad."""
+    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.M)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    text = text.replace("```", "")
+    return text.strip() + "\n"
 
 
 def _read_segments(path: Path) -> list[Segment]:
@@ -308,31 +318,31 @@ def run(
             if not content.strip():
                 return
             if english_source:
-                _write(out / name.replace(".md", ".en.md"), content)
+                _write(out / f"{name}.en.txt", _plain(content))
                 try:
                     chinese = generate.chinese_doc(content, cfg)
                 except Exception:
                     chinese = ""
-                _write(out / name, chinese or content)
+                _write(out / f"{name}.txt", _plain(chinese or content))
             else:
-                _write(out / name, content)
+                _write(out / f"{name}.txt", _plain(content))
                 try:
                     english = generate.english_doc(content, cfg)
                 except Exception:
                     english = ""
                 if english.strip():
-                    _write(out / name.replace(".md", ".en.md"), english)
+                    _write(out / f"{name}.en.txt", _plain(english))
 
         if "a" in outputs:
-            emit("a-script.md", generate.clean_script(segments, cfg))
+            emit("a-script", generate.clean_script(segments, cfg))
         if "b" in outputs:
             glossary_text, _ = lex.context_for(transcript_text)
-            emit("b-expand.md",
+            emit("b-expand",
                  generate.expand_draft(segments, units or [], cfg, glossary_text))
         if units and "c" in outputs:
-            emit("c-report.md", generate.report(units, cfg, transcript_text))
+            emit("c-report", generate.report(units, cfg, transcript_text))
         if units and "d" in outputs:
-            emit("d-brief.md", generate.brief(units, cfg, transcript_text))
+            emit("d-brief", generate.brief(units, cfg, transcript_text))
 
     manifest = {
         "source": str(source),

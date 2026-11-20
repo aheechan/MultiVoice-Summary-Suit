@@ -343,7 +343,8 @@ class LibraryDialog(QDialog):
             return
         if not dirs:
             return
-        for path in list(dirs[0].glob("*.md")) + list(dirs[0].glob("text/*.txt")):
+        for path in (list(dirs[0].glob("*.txt")) + list(dirs[0].glob("*.md"))
+                     + list(dirs[0].glob("text/*.txt"))):
             try:
                 text = path.read_text(encoding="utf-8")
             except OSError:

@@ -30,17 +30,17 @@ Every job writes to `output/<YYYYMMDD-NN>/`:
 
 | File | What it is |
 |---|---|
-| `a-script.md` / `.en.md` | **Clean spoken script** — readable first-person draft, fillers removed, facts kept |
-| `b-expand.md` / `.en.md` | **Knowledge expansion draft** — third-person rewrite that adds background for non-common-sense points |
-| `c-report.md` / `.en.md` | **Knowledge report** — each point explained as what / why / how / limits |
-| `d-brief.md` / `.en.md` | **Study brief** — conclusion, key points, short body |
+| `a-script.txt` / `.en.txt` | **Clean spoken script** — readable first-person draft, fillers removed, facts kept |
+| `b-expand.txt` / `.en.txt` | **Knowledge expansion draft** — third-person rewrite that adds background for non-common-sense points |
+| `c-report.txt` / `.en.txt` | **Knowledge report** — each point explained as what / why / how / limits |
+| `d-brief.txt` / `.en.txt` | **Study brief** — conclusion, key points, short body |
 | `text/original.txt` | Corrected transcript |
 | `text/translated.<lang>.txt` | Translation |
 | `text/bilingual.*.txt` | Side-by-side text for proofreading |
 | `text/subtitle.zh.srt` | Chinese subtitles, 13–26 characters per cue |
 | `text/subtitle.en.srt` | English subtitles, 13–26 characters per cue |
 
-The `.md` without a suffix is always Chinese; `.en.md` is always English — regardless of the source language.
+The `.txt` without a suffix is always Chinese; `.en.txt` is always English — regardless of the source language. Files are plain text, readable in Notepad.
 
 ## Screenshots
 

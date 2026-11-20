@@ -386,10 +386,14 @@ class TrayApp(QSystemTrayIcon):
         if not out or not out.exists():
             return None
         if kind in ("a", "b", "c", "d"):
-            names = {"a": "a-script.md", "b": "b-expand.md",
-                     "c": "c-report.md", "d": "d-brief.md"}
-            path = out / names[kind]
-            return path if path.exists() else None
+            stems = {"a": "a-script", "b": "b-expand",
+                     "c": "c-report", "d": "d-brief"}
+            stem = stems[kind]
+            for suffix in (".txt", ".md"):  # .md keeps older jobs working
+                path = out / f"{stem}{suffix}"
+                if path.exists():
+                    return path
+            return None
         text_dir = out / "text"
         if not text_dir.exists():
             return None

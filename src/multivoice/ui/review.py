@@ -545,7 +545,8 @@ class ReviewDialog(QDialog):
             return
 
         latest = dirs[0]
-        targets = list(latest.glob("*.md")) + list(latest.glob("text/*.txt"))
+        targets = (list(latest.glob("*.txt")) + list(latest.glob("*.md"))
+                   + list(latest.glob("text/*.txt")))
         for path in targets:
             try:
                 text = path.read_text(encoding="utf-8")

@@ -97,7 +97,11 @@ set "MVS_GLOSSARY=%~dp0glossary\terms.jsonl"
 if not exist "%~dp0work" mkdir "%~dp0work"
 if not exist "%~dp0output" mkdir "%~dp0output"
 if not exist "%~dp0glossary" mkdir "%~dp0glossary"
-"%~dp0runtime\python\pythonw.exe" -m multivoice.ui.tray --panel
+if "%~1"=="" (
+  "%~dp0runtime\python\pythonw.exe" -m multivoice.ui.tray --panel
+) else (
+  "%~dp0runtime\python\pythonw.exe" -m multivoice.ui.tray --panel --input "%~1"
+)
 '@
 [System.IO.File]::WriteAllText((Join-Path $Dist 'Start-MultiVoice.bat'), $bat,
     (New-Object System.Text.ASCIIEncoding))

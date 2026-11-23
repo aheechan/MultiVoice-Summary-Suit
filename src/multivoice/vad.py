@@ -57,8 +57,16 @@ def detect_speech_spans(
     return [s for s in spans if s.duration > 0.05]
 
 
+def _ffprobe(ffmpeg: str) -> str:
+    """Resolve ffprobe beside ffmpeg without renaming its parent directory."""
+    path = Path(ffmpeg)
+    if path.parent == Path("."):
+        return "ffprobe"
+    return str(path.with_name("ffprobe" + path.suffix))
+
+
 def _duration(audio: Path, ffmpeg: str) -> float:
-    probe = ffmpeg.replace("ffmpeg", "ffprobe")
+    probe = _ffprobe(ffmpeg)
     proc = subprocess.run(
         [probe, "-v", "error", "-show_entries", "format=duration",
          "-of", "default=nw=1:nk=1", str(audio)],

@@ -681,6 +681,20 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
 
     if not _acquire_instance_mutex():
         print("MultiVoice is already running. Use the tray icon to open it.")
+        if not os.environ.get("MVS_TRAY_SELFTEST"):
+            try:
+                import ctypes
+
+                ctypes.windll.user32.MessageBoxW(
+                    None,
+                    "MultiVoice is already running.\n"
+                    "Look for the blue icon in the notification area,\n"
+                    "or close the existing instance first.",
+                    i18n.t("app_name"),
+                    0x40,
+                )
+            except Exception:
+                pass
         return 0
 
     try:
@@ -702,6 +716,11 @@ def run_tray(cfg: Config, initial: Path | None = None, show_panel: bool = False,
         QTimer.singleShot(300, tray.open_panel)
     if show_review:
         QTimer.singleShot(600, tray.open_review)
+    if initial is not None:
+        QTimer.singleShot(
+            900,
+            lambda: tray.start_job(Path(initial), tray.TRANSCRIBE_STAGES, "transcribe"),
+        )
 
     QTimer.singleShot(4000, tray.check_pending)
     daily = QTimer(tray)

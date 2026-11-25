@@ -111,7 +111,19 @@ def merge_spans(
             cleaned[-1] = Span(prev.start, span.end)
         else:
             cleaned.append(span)
-    return cleaned
+
+    # A loud-music recording never drops below the silence threshold, so
+    # silencedetect returns one span for the whole file and the merge loop above
+    # never runs. Cut such a span into fixed windows anyway: the ASR silently
+    # stops at its token cap on anything much longer than 30 s.
+    split: list[Span] = []
+    for span in cleaned:
+        cursor = span.start
+        while span.end - cursor > max_seconds:
+            split.append(Span(cursor, cursor + max_seconds))
+            cursor += max_seconds
+        split.append(Span(cursor, span.end))
+    return [span for span in split if span.duration > 0.05]
 
 
 def cut(audio: Path, span: Span, target: Path, ffmpeg: str = "ffmpeg") -> Path:

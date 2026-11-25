@@ -280,6 +280,27 @@ def run(
     background = bgm.analyze(audio)
     _write(job / "bgm.json", json.dumps(background, ensure_ascii=False, indent=2))
 
+    # A silent truncation used to surface as "transcript ready" with half the
+    # audio missing. Make it an explicit failure instead.
+    coverage = 1.0
+    try:
+        total_seconds = vad._duration(audio, cfg.ffmpeg)
+    except Exception:
+        total_seconds = 0.0
+    if total_seconds and segments:
+        last_end = max(seg.end for seg in segments)
+        coverage = min(1.0, last_end / total_seconds)
+        # Half the audio missing AND far too little text: definitely truncated.
+        # (A long music outro can lower coverage without losing speech.)
+        chars_per_second = len(transcript) / total_seconds
+        if "asr" in stages and coverage < 0.9 and chars_per_second < 2.0:
+            raise RuntimeError(
+                f"ASR covered only {coverage:.0%} of the audio "
+                f"({last_end:.0f}s of {total_seconds:.0f}s, "
+                f"{chars_per_second:.1f} chars/s); "
+                "check VAD chunking (vad.max_seconds) and asr.max_new_tokens"
+            )
+
     source_lang = _norm_lang(detected) or "zh"
     if "translate" in stages:
         report(86, "translate")
@@ -352,6 +373,7 @@ def run(
         "domain": context.get("domain", "other"),
         "segments": len(segments),
         "units": len(units),
+        "coverage": round(coverage, 3),
         "bgm": background,
         "aliases_repaired": [f"{a}->{b}" for a, b in alias_changes],
         "terms_researched": [e["term"] for e in researched],

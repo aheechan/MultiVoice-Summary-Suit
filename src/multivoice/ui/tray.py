@@ -532,6 +532,17 @@ class TrayApp(QSystemTrayIcon):
     def on_error(self, message: str) -> None:
         self.panel_status = i18n.t("status_failed")
         self.action_status.setText(self.panel_status)
+        try:
+            from datetime import datetime
+
+            log = PROJECT_ROOT / "work" / "tray-error.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    f"[{datetime.now():%Y-%m-%d %H:%M:%S}] job failed: {message}\n"
+                )
+        except Exception:
+            pass
         if self.panel is not None:
             self.panel.clear_progress()
         self.showMessage(i18n.t("app_name"),

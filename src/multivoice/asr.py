@@ -62,7 +62,10 @@ def _load_qwen3(cfg: Config):
     if model_path is None or not Path(model_path).exists():
         raise RuntimeError(f"ASR model not found: {model_path}")
     return Qwen3ASRModel.from_pretrained(
-        str(model_path), device_map=cfg.asr.get("device", "cuda")
+        str(model_path), device_map=cfg.asr.get("device", "cuda"),
+        # The library default is 512 tokens, which silently truncates a long
+        # chunk mid-sentence. Chunks are <= 30 s now, so this is only a guard.
+        max_new_tokens=int(cfg.asr.get("max_new_tokens", 4096)),
     )
 
 

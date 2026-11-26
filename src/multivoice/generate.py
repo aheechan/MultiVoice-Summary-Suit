@@ -1,10 +1,24 @@
 from __future__ import annotations
 
 import json
+import re
 
 from .asr import Segment
 from .config import Config, PROJECT_ROOT
 from .llm import chat
+
+META = re.compile(r"原文|误作|应为|实为|结合上下文|此处|音译|校注|注[:：]")
+PAREN = re.compile(r"[（(][^（）()]{0,240}[）)]")
+
+
+def _strip_notes(text: str) -> str:
+    """Drop editorial parentheses such as '（原文误作…）' from the body."""
+
+    def repl(match: re.Match) -> str:
+        inner = match.group(0)[1:-1]
+        return "" if META.search(inner) else match.group(0)
+
+    return re.sub(r"[ \t]{2,}", " ", PAREN.sub(repl, text))
 
 
 def _prompt(name: str) -> str:
@@ -13,6 +27,7 @@ def _prompt(name: str) -> str:
 
 def _guard(text: str, source: str, ratio: float, floor: int = 60) -> str:
     """Reject output that grew far beyond its source: that is fabrication, not editing."""
+    text = _strip_notes(text)
     if not text.strip():
         return ""
     if len(text) > max(floor, int(len(source) * ratio)):
@@ -72,7 +87,9 @@ def english_doc(text: str, cfg: Config) -> str:
     prompt = (
         "Translate the following document into natural, professional English. "
         "Keep the markdown headings, bullet lists and paragraph breaks. "
-        "Do not summarise or add content. Output only the translation.\n\n" + text
+        "Do not summarise or add content. "
+        "Never replace a proper noun with a more famous lookalike; keep Latin-script "
+        "names exactly as written. Output only the translation.\n\n" + text
     )
     return chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
 
@@ -83,13 +100,14 @@ def chinese_doc(text: str, cfg: Config) -> str:
         return ""
     prompt = (
         "把下面这份文档翻译成自然、专业的中文。保留 Markdown 标题、列表和段落结构，"
-        "不要总结、不要增删内容。只输出译文。\n\n" + text
+        "不要总结、不要增删内容。英文人名、公司名、产品名、机构名一律保留英文原文，"
+        "不要音译成中文。只输出译文。\n\n" + text
     )
     return chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
 
 
 def expand_draft(segments: list[Segment], units: list[dict], cfg: Config,
-                 glossary_text: str = "") -> str:
+                 glossary_text: str = "", reference: str = "") -> str:
     """Rewrite the script with background added for non-common-sense points."""
     body = "\n".join(seg.text for seg in segments)
     payload = json.dumps(units, ensure_ascii=False, indent=2)
@@ -98,6 +116,7 @@ def expand_draft(segments: list[Segment], units: list[dict], cfg: Config,
         .replace("{{TEXT}}", body)
         .replace("{{UNITS}}", payload)
         .replace("{{GLOSSARY}}", glossary_text or "（无）")
+        .replace("{{REFERENCE}}", reference or "（无）")
     )
     answer = chat([{"role": "user", "content": prompt}], cfg, max_tokens=12000)
     target = max(800, int(len(body) * 2.6))

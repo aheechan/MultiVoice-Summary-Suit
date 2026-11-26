@@ -25,6 +25,7 @@ class Config:
     vad: dict = field(default_factory=dict)
     verify: dict = field(default_factory=dict)
     research: dict = field(default_factory=dict)
+    expand: dict = field(default_factory=dict)
     languages: list = field(default_factory=lambda: ["zh", "en"])
 
 
@@ -68,6 +69,7 @@ def load(config_dir: str | Path | None = None) -> Config:
         vad=models.get("vad", {}),
         verify=models.get("verify", {}),
         research=models.get("research", {}),
+        expand=models.get("expand", {}),
         languages=list(paths.get("output", {}).get("languages", ["zh", "en"])),
     )
 

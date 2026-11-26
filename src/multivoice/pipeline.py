@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import (asr, bgm, classify, correct, generate, glossary, ingest,
-               normalize, research, structure, translate, vad, verify)
+               names, normalize, research, structure, translate, vad, verify)
 from .asr import Segment
 from .config import Config
 
@@ -251,6 +251,19 @@ def run(
             evidence, items = verify.build_evidence(context["terms"], cfg)
             findings = verify.suggest(items, evidence)
 
+            # Decide proper nouns from evidence BEFORE the rewrite pass; only
+            # high-confidence fixes land, and they are remembered for next time.
+            name_fixes = names.audit(
+                segments, context["terms"], evidence, glossary_text, cfg
+            )
+            if name_fixes:
+                alias_changes.extend(name_fixes)
+                for wrong, right in name_fixes:
+                    lex.remember_correction(wrong, right)
+                _write(job / "names.json",
+                       json.dumps([{"wrong": w, "right": r} for w, r in name_fixes],
+                                  ensure_ascii=False, indent=2))
+
             _write(job / "context.json", json.dumps({
                 "classify": context,
                 "evidence": evidence,
@@ -358,8 +371,13 @@ def run(
             emit("a-script", generate.clean_script(segments, cfg))
         if "b" in outputs:
             glossary_text, _ = lex.context_for(transcript_text)
+            reference = ""
+            if cfg.expand.get("web", False):
+                terms = list(context.get("terms", []))[: int(cfg.expand.get("max_terms", 6))]
+                reference, _items = verify.build_evidence(terms, cfg)
             emit("b-expand",
-                 generate.expand_draft(segments, units or [], cfg, glossary_text))
+                 generate.expand_draft(segments, units or [], cfg,
+                                       glossary_text, reference))
         if units and "c" in outputs:
             emit("c-report", generate.report(units, cfg, transcript_text))
         if units and "d" in outputs:

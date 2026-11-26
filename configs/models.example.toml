@@ -64,3 +64,8 @@ max_terms = 8
 # 遇到词库没有或已过期的词，现场联网核实（每次任务有上限）
 enabled = true
 max_terms = 6
+
+[expand]
+# true：先联网取百科摘要，作为知识拓展稿的素材（默认关闭）
+web = false
+max_terms = 6

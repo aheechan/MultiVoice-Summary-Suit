@@ -5,7 +5,10 @@ Rules:
 2. Keep the speaker's tone; do not turn speech into an essay.
 3. Keep paragraph breaks where the source has them.
 4. Do not translate proper nouns that are already in Latin script.
-5. Output only the translation, no notes, no headings.
+5. **Never replace a Chinese proper noun with a more famous lookalike.** Translate the
+   name as written (transliterate if needed); do not substitute a different person or place
+   you happen to know. Keep Latin-script names exactly as they appear (George Mellor, Rawfolds, AT&T).
+6. Output only the translation, no notes, no headings, no parenthetical explanations.
 
 Source:
 {{TEXT}}

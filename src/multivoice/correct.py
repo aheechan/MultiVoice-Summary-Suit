@@ -10,6 +10,14 @@ from .llm import chat
 PROMPT = PROJECT_ROOT / "prompts" / "correct.zh.txt"
 
 
+def _strip_markdown(line: str) -> str:
+    """Models sometimes bold proper nouns; keep the plain transcript clean."""
+    line = line.strip()
+    line = line.replace("**", "").replace("__", "")
+    line = line.replace("`", "")
+    return line.lstrip("# ").strip()
+
+
 def load_glossary(path: Path | None = None) -> str:
     path = path or PROJECT_ROOT / "configs" / "glossary.csv"
     if not path.exists():
@@ -59,7 +67,7 @@ def correct_segments(
         )
         answer = chat([{"role": "user", "content": prompt}], cfg, temperature=0.0,
                       max_tokens=max(512, len(source)))
-        lines = [line.strip() for line in answer.splitlines() if line.strip()]
+        lines = [_strip_markdown(line) for line in answer.splitlines() if line.strip()]
         for seg, line in zip(group, lines):
             corrected.append(Segment(seg.index, seg.start, seg.end, line, seg.lang))
         # keep any segment the model dropped, untouched
